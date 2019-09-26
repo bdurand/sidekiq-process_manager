@@ -1,0 +1,42 @@
+language: ruby
+
+before_install:
+  - gem uninstall -v '>= 2' -i $(rvm gemdir)@global -ax bundler || true
+  - gem install bundler -v '< 2'
+
+cache: bundler
+
+branches:
+  # Only build master and release version tags
+  only:
+    - master
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
+    - travis
+
+rvm:
+  - "2.6"
+
+gemfile:
+  - Gemfile
+
+matrix:
+  include:
+  - rvm: "2.6"
+    gemfile: gemfiles/sidekiq_6.gemfile
+
+  - rvm: "2.5"
+    gemfile: gemfiles/sidekiq_5.gemfile
+
+  - rvm: "2.5"
+    gemfile: gemfiles/sidekiq_4.gemfile
+
+  - rvm: "2.2.2"
+    gemfile: gemfiles/sidekiq_3.gemfile
+
+script:
+  - gem list bundler
+  - bundle exec rake spec
+
+env:
+  RACK_ENV: ""
+  RAILS_ENV: ""
