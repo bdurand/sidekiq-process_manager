@@ -1,4 +1,7 @@
-# Sidekiq Process Manager
+# Sidekiq::ProcessManager
+
+[![Build Status](https://travis-ci.com/bdurand/sidekiq-process_manager.svg?branch=master)](https://travis-ci.com/bdurand/sidekiq-process_manager)
+[![Maintainability](https://api.codeclimate.com/v1/badges/ed89164d480af0e1442e/maintainability)](https://codeclimate.com/github/bdurand/sidekiq-process_manager/maintainability)
 
 This gem provides a command line script for managing [sidekiq](https://github.com/mperham/sidekiq) processes. It will start up a process that will then fork multiple sidekiq processes and manage their life cycle. This is important for large sidekiq installations since without it on MRI ruby, sidekiq will only use one CPU core. By starting multiple processes you can make all the cores available.
 
