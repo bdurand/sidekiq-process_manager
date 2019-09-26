@@ -35,6 +35,12 @@ end
 
 If you're already using a pre-forking web server, you'll need to do most of the same things for sidekiq as well.
 
+## Pre-Booting
+
+If your application can't be pre-forked, you can at load the gem files and libraries your application depends instead by specifying a preboot file. This file will be loaded by the master process and any code loaded will be copy-on-write shared with the child processes.
+
+For a Rails application, you would normally want to preboot the `config/boot.rb` file.
+
 ## Usage
 
 Install the gem in your sidekiq process and run it with `bundle exec sidekiq-process-manager` or, if you use [bundle binstubs](https://bundler.io/man/bundle-binstubs.1.html), `bin/sidekiq-process-manager`. All command line arguments are passed through to sidekiq.
@@ -55,7 +61,6 @@ or
 SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
-
 You can turn pre-forking on or off with the --prefork or --no-prefork flag. You can also specify to turn on pre-forking with the `SIDEKIQ_PREFORK` environment variable.
 
 ```bash
@@ -66,6 +71,17 @@ or
 
 ```bash
 SIDEKIQ_PREFORK=1 SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
+```
+
+You can turn pre-booting on with the `--preboot` argument or with the `SIDEKIQ_PREBOOT` environment variable.
+```bash
+bundle exec sidekiq-process-manager --processes 4 --preboot config/boot.rb
+```
+
+or
+
+```bash
+SIDEKIQ_PREBOOT=config/boot.rb SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
 ## Alternatives

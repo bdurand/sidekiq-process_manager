@@ -5,13 +5,14 @@ require "spec_helper"
 describe Sidekiq::ProcessManager::Manager do
 
   let!(:manager) do
-    manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, mode: :testing, silent: true)
+    manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, mode: :testing, silent: true)
     Thread.new { manager.start }
     manager.wait(1)
     manager
   end
 
   let(:prefork) { false }
+  let(:preboot) { nil }
   let(:process_count) { 2 }
 
   after do
@@ -78,7 +79,6 @@ describe Sidekiq::ProcessManager::Manager do
   end
 
   describe "with pre-forking processes" do
-
     let(:prefork) { true }
 
     it "should preload the application" do
@@ -92,6 +92,31 @@ describe Sidekiq::ProcessManager::Manager do
     it "should call after fork hooks on the child processes" do
       manager.pids.each do |pid|
         expect(manager.cli.output_for(pid)).to eq ["after_fork_1", "after_fork_2"]
+      end
+    end
+  end
+
+  describe "with pre-booting code" do
+    let(:preboot) do
+      file = Tempfile.new(["preboot", ".rb"])
+      file.write("$prebooted = true")
+      file.flush
+      file.path
+    end
+
+    after(:each) do
+      $prebooted = false
+      File.unlink(preboot)
+    end
+
+    it "should load the config/boot.rb file" do
+      manager
+      expect($prebooted).to eq true
+    end
+
+    it "should not call before or after fork hooks on the child processes" do
+      manager.pids.each do |pid|
+        expect(manager.cli.output_for(pid)).to eq []
       end
     end
   end

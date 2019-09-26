@@ -56,9 +56,14 @@ begin
     prefork = !ENV.fetch("SIDEKIQ_PREFORK", "").empty?
   end
 
+  preboot = extract_option_value!("preboot")
+  if preboot.nil?
+    preboot = ENV["SIDEKIQ_PREBOOT"]
+  end
+
   mode = :testing if extract_option_flag!("testing")
 
-  manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, mode: mode)
+  manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, mode: mode)
   manager.start
 rescue => e
   STDERR.puts e.message

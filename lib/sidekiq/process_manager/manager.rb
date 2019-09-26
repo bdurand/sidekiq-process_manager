@@ -9,12 +9,13 @@ module Sidekiq
 
       attr_reader :cli
 
-      def initialize(process_count: 1, prefork: false, mode: nil, silent: false)
+      def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
         # Get the number of processes to fork
         @process_count = process_count
         raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
 
         @prefork = (prefork && process_count > 1)
+        @preboot = preboot if process_count > 1 && !prefork
 
         if mode == :testing
           require_relative "../../../spec/support/mocks"
@@ -128,6 +129,12 @@ module Sidekiq
           log_info("Pre-forking application")
           @cli.send(:boot_system)
           Sidekiq::ProcessManager.run_before_fork_hooks
+        elsif @preboot && !@preboot.empty?
+          if ::File.exist?(@preboot)
+            require ::File.expand_path(@preboot).sub(/\.rb\Z/, "")
+          else
+            log_warning("Could not find preboot file #{@preboot}")
+          end
         end
       end
 

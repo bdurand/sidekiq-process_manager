@@ -1,5 +1,6 @@
 require "bundler/setup"
 require "sidekiq/process_manager"
+require "tempfile"
 
 require_relative "support/mocks"
 
