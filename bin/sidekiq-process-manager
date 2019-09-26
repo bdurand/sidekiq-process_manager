@@ -1,0 +1,67 @@
+#! /usr/bin/env ruby
+
+# frozen_string_literal: true
+
+require_relative "../lib/sidekiq-process_manager"
+
+# Scan the command line args and remove the named one. Values can be specified
+# either in the next argv element or in the same element after an equals sign.
+def extract_option_value!(name)
+  value = nil
+  ARGV.each_with_index do |option, index|
+    if option == "--#{name}" || option.start_with?("--#{name}=")
+      option_index = index
+      if option.include?("=")
+        value = option.split("=", 2).last
+      else
+        value = ARGV.delete_at(index + 1)
+      end
+      ARGV.delete_at(index)
+      break
+    end
+  end
+  value
+end
+
+# Scan the command line args and remove a flag style argument and return the value.
+# The negative of an argument can be passes as --no-argname. Returns nil if the
+# flag is not set at all.
+def extract_option_flag!(name)
+  value = nil
+  ARGV.each_with_index do |option, index|
+    if option == "--#{name}"
+      value = true
+    elsif option == "--no-#{name}"
+      value = false
+    end
+    unless value.nil?
+      ARGV.delete_at(index)
+      break
+    end
+  end
+  value
+end
+
+begin
+  process_count = 1
+  process_count_arg = extract_option_value!("processes")
+  if process_count_arg
+    process_count = Integer(process_count_arg)
+  else
+    process_count = Integer(ENV.fetch("SIDEKIQ_PROCESSES", "1"))
+  end
+
+  prefork = extract_option_flag!("prefork")
+  if prefork.nil?
+    prefork = !ENV.fetch("SIDEKIQ_PREFORK", "").empty?
+  end
+
+  mode = :testing if extract_option_flag!("testing")
+
+  manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, mode: mode)
+  manager.start
+rescue => e
+  STDERR.puts e.message
+  STDERR.puts e.backtrace.join($/)
+  exit 1
+end
