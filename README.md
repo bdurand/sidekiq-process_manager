@@ -43,10 +43,17 @@ For a Rails application, you would normally want to preboot the `config/boot.rb`
 
 ## Usage
 
-Install the gem in your sidekiq process and run it with `bundle exec sidekiq-process-manager` or, if you use [bundle binstubs](https://bundler.io/man/bundle-binstubs.1.html), `bin/sidekiq-process-manager`. All command line arguments are passed through to sidekiq.
+Install the gem in your sidekiq process and run it with `bundle exec sidekiq-process-manager` or, if you use [bundle binstubs](https://bundler.io/man/bundle-binstubs.1.html), `bin/sidekiq-process-manager`. Command line arguments are passed through to `sidekiq`. If you want to supply on of the `sidekiq-process_manager` specific options, those options should come first and the `sidekiq` options should appear after a `--` flag
 
 ```bash
 bundle exec sidekiq-process-manager -C config/sidekiq.yml
+```
+
+or
+
+
+```bash
+bundle exec sidekiq-process-manager --no-prefork -- -C config/sidekiq.yml
 ```
 
 You can specify the number of sidekiq processes to run with the `--processes` argument or with the `SIDEKIQ_PROCESSES` environment variable. The default number of processes is 1.
