@@ -49,7 +49,7 @@ Install the gem in your sidekiq process and run it with `bundle exec sidekiq-pro
 bundle exec sidekiq-process-manager -C config/sidekiq.yml
 ```
 
-You can specify the number for sidekiq processes to run with the `--processes` argument or with the `SIDEKIQ_PROCESSES` environment variable. The default number of processes is 1.
+You can specify the number of sidekiq processes to run with the `--processes` argument or with the `SIDEKIQ_PROCESSES` environment variable. The default number of processes is 1.
 
 ```bash
 bundle exec sidekiq-process-manager --processes 4
