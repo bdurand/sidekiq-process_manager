@@ -1,69 +1,64 @@
-#! /usr/bin/env ruby
-
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require 'optparse'
 require_relative "../lib/sidekiq-process_manager"
 
-# Scan the command line args and remove the named one. Values can be specified
-# either in the next argv element or in the same element after an equals sign.
-def extract_option_value!(name)
-  value = nil
-  ARGV.each_with_index do |option, index|
-    if option == "--#{name}" || option.start_with?("--#{name}=")
-      option_index = index
-      if option.include?("=")
-        value = option.split("=", 2).last
-      else
-        value = ARGV.delete_at(index + 1)
-      end
-      ARGV.delete_at(index)
-      break
-    end
+DEFAULT_PROCESS_COUNT = 1
+
+options = {
+  process_count: Integer(ENV.fetch('SIDEKIQ_PROCESSES', DEFAULT_PROCESS_COUNT)),
+  prefork: !ENV.fetch("SIDEKIQ_PREFORK", "").empty?,
+  preboot: ENV["SIDEKIQ_PREBOOT"],
+  mode: nil,
+}
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: sidekiq-process-manager [options] [--] [sidekiq options]"
+
+  opts.on('--processes PROCESSES', Integer, "Number of processes to spin up (can also specify with SIDEKIQ_PROCESSES)") do |count|
+    options[:process_count] = count
   end
-  value
+
+  opts.on('--[no-]prefork', "Use prefork for spinning up sidekiq processes (can also specify with SIDEKIQ_PREFORK)") do |prefork|
+    options[:prefork] = prefork
+  end
+
+  opts.on('--preboot FILE', "Preboot the processes (can also specify with SIDEKIQ_PREBOOT)") do |preboot|
+    options[:preboot] = preboot
+  end
+
+  opts.on('--testing', "Enable test mode") do |testing|
+    options[:mode] = :testing if testing
+  end
+
+  opts.on("--help", "Prints this help") do
+    puts opts
+    exit
+  end
+
+  opts.separator(<<~DESCR)
+
+  After the manager options, pass in any options for the sidekiq processes.
+  Additionally, passing in the optional `--` will explicitly end the manager options and begin the sidekiq opts.
+  E.g.
+      $ sidekiq-process-manager --no-prefork -- -C config/sidekiq.rb
+      Calls sidekiq with `sidekiq -C config/sidekiq.rb`
+  DESCR
 end
 
-# Scan the command line args and remove a flag style argument and return the value.
-# The negative of an argument can be passes as --no-argname. Returns nil if the
-# flag is not set at all.
-def extract_option_flag!(name)
-  value = nil
-  ARGV.each_with_index do |option, index|
-    if option == "--#{name}"
-      value = true
-    elsif option == "--no-#{name}"
-      value = false
-    end
-    unless value.nil?
-      ARGV.delete_at(index)
-      break
-    end
-  end
-  value
+sidekiq_args = []
+begin
+  parser.order!(ARGV) { |nonopt| sidekiq_args << nonopt }
+rescue OptionParser::InvalidOption => err
+  # Handle the case where a user doesn't put in the `--` to separate the args
+  sidekiq_args.concat(err.args)
 end
+
+ARGV[0, 0] = sidekiq_args
 
 begin
-  process_count = 1
-  process_count_arg = extract_option_value!("processes")
-  if process_count_arg
-    process_count = Integer(process_count_arg)
-  else
-    process_count = Integer(ENV.fetch("SIDEKIQ_PROCESSES", "1"))
-  end
-
-  prefork = extract_option_flag!("prefork")
-  if prefork.nil?
-    prefork = !ENV.fetch("SIDEKIQ_PREFORK", "").empty?
-  end
-
-  preboot = extract_option_value!("preboot")
-  if preboot.nil?
-    preboot = ENV["SIDEKIQ_PREBOOT"]
-  end
-
-  mode = :testing if extract_option_flag!("testing")
-
-  manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, mode: mode)
+  manager = Sidekiq::ProcessManager::Manager.new(**options)
   manager.start
 rescue => e
   STDERR.puts e.message
