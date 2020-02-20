@@ -37,7 +37,7 @@ If you're already using a pre-forking web server, you'll need to do most of the 
 
 ## Pre-Booting
 
-If your application can't be pre-forked, you can at load the gem files and libraries your application depends on instead by specifying a preboot file. This file will be loaded by the master process and any code loaded will be copy-on-write shared with the child processes.
+If your application can't be pre-forked, you can at least load the gem files and libraries your application depends on instead by specifying a preboot file. This file will be loaded by the master process and any code loaded will be copy-on-write shared with the child processes.
 
 For a Rails application, you would normally want to preboot the `config/boot.rb` file.
 
