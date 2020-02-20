@@ -1,7 +1,7 @@
 PATH
   remote: ..
   specs:
-    sidekiq-process_manager (1.0.0)
+    sidekiq-process_manager (1.0.1)
       sidekiq (>= 3.0)
 
 GEM
@@ -44,11 +44,11 @@ PLATFORMS
 
 DEPENDENCIES
   appraisal
-  bundler (~> 1.10)
+  bundler
   rake
   rspec (~> 3.0)
   sidekiq (~> 4.0)
   sidekiq-process_manager!
 
 BUNDLED WITH
-   1.17.2
+   1.17.3
