@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class MockSidekiqCLI
-
   attr_reader :application
   attr_writer :silent
 
@@ -21,7 +20,7 @@ class MockSidekiqCLI
 
   def run
     unless Sidekiq::CLI.instance.public_methods.include?(:run)
-      raise 'Sidekiq::CLI#run not defined'
+      raise "Sidekiq::CLI#run not defined"
     end
     $PROGRAM_NAME = "mock sidekiq"
     boot_system
@@ -32,7 +31,7 @@ class MockSidekiqCLI
 
   def parse
     unless Sidekiq::CLI.instance.public_methods.include?(:parse)
-      raise 'Sidekiq::CLI#parse not defined'
+      raise "Sidekiq::CLI#parse not defined"
     end
   end
 
@@ -51,7 +50,7 @@ class MockSidekiqCLI
     return if @application
 
     unless Sidekiq::CLI.instance.methods.include?(:boot_system) || Sidekiq::CLI.instance.private_methods.include?(:boot_system)
-      raise 'Sidekiq::CLI#boot_system not defined'
+      raise "Sidekiq::CLI#boot_system not defined"
     end
 
     @application = MockApplication.new(output: @pipe_writer, silent: @silent)
@@ -62,8 +61,7 @@ class MockSidekiqCLI
     begin
       loop { @process_output << @pipe_reader.read_nonblock(4096) }
     rescue IO::EAGAINWaitReadable
-      return
+      nil
     end
   end
-
 end
