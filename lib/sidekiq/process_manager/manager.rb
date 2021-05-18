@@ -144,6 +144,8 @@ module Sidekiq
 
       def start_child_process!
         @pids << fork do
+          # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
+          $0 = File.join(File.dirname($0), "sidekiq")
           @process_count = 0
           @pids.clear
           Sidekiq::ProcessManager.run_after_fork_hooks
