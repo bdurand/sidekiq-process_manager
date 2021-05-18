@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "sidekiq"
-require "sidekiq/cli"
 
 module Sidekiq
   module ProcessManager
@@ -10,6 +9,8 @@ module Sidekiq
       attr_reader :cli
 
       def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
+        require "sidekiq/cli"
+        
         # Get the number of processes to fork
         @process_count = process_count
         raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
