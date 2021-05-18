@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class MockSidekiqCLI
-
   attr_reader :application
   attr_writer :silent
 
@@ -21,18 +20,20 @@ class MockSidekiqCLI
 
   def run
     unless Sidekiq::CLI.instance.public_methods.include?(:run)
-      raise 'Sidekiq::CLI#run not defined'
+      raise "Sidekiq::CLI #{Sidekiq::VERSION} does not defined a run method"
     end
     $PROGRAM_NAME = "mock sidekiq"
-    boot_system
+    boot_mock_application
     process = MockSidekiqProcess.new(@application)
     @processes[process.pid] = process
     process.run
+  rescue => e
+    warn e.inpsect, e.backtrace.join("\n")
   end
 
   def parse
     unless Sidekiq::CLI.instance.public_methods.include?(:parse)
-      raise 'Sidekiq::CLI#parse not defined'
+      raise "Sidekiq::CLI #{Sidekiq::VERSION} does not defined a parse method"
     end
   end
 
@@ -47,23 +48,25 @@ class MockSidekiqCLI
 
   private
 
-  def boot_system
-    return if @application
-
-    unless Sidekiq::CLI.instance.methods.include?(:boot_system) || Sidekiq::CLI.instance.private_methods.include?(:boot_system)
-      raise 'Sidekiq::CLI#boot_system not defined'
+  class_eval <<~RUBY, __FILE__, __LINE__ + 1
+    def #{Sidekiq::VERSION.to_f < 6.0 ? "boot_system" : "boot_application"}
+      boot_mock_application
     end
+  RUBY
 
+  def boot_mock_application
+    return if @application
     @application = MockApplication.new(output: @pipe_writer, silent: @silent)
     @application.start
+  rescue => e
+    warn e.inpsect, e.backtrace.join("\n")
   end
 
   def read_process_output!
     begin
       loop { @process_output << @pipe_reader.read_nonblock(4096) }
     rescue IO::EAGAINWaitReadable
-      return
+      nil
     end
   end
-
 end

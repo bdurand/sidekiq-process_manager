@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class MockSidekiqProcess
-
   attr_reader :pid, :signals, :application
 
   def initialize(application)
@@ -23,7 +22,7 @@ class MockSidekiqProcess
       end
     end
 
-    while running? do
+    while running?
       sleep(0.01)
     end
   end
@@ -31,5 +30,4 @@ class MockSidekiqProcess
   def running?
     @running
   end
-
 end

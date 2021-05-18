@@ -5,12 +5,11 @@ require "sidekiq"
 module Sidekiq
   module ProcessManager
     class Manager
-
       attr_reader :cli
 
       def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
         require "sidekiq/cli"
-        
+
         # Get the number of processes to fork
         @process_count = process_count
         raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
@@ -128,7 +127,12 @@ module Sidekiq
         Sidekiq.options[:pidfile] = false
         if @prefork
           log_info("Pre-forking application")
-          @cli.send(:boot_system)
+          # Prior to sidekiq 6.1 the method to boot the application was boot_system
+          if @cli.methods.include?(:boot_application) || @cli.private_methods.include?(:boot_application)
+            @cli.send(:boot_application)
+          else
+            @cli.send(:boot_system)
+          end
           Sidekiq::ProcessManager.run_before_fork_hooks
         elsif @preboot && !@preboot.empty?
           if ::File.exist?(@preboot)
@@ -158,7 +162,7 @@ module Sidekiq
 
       def send_signal_to_children(signal)
         log_info("Process manager trapped signal #{signal}")
-        @process_count = 0 if (signal == :INT || signal == :TERM)
+        @process_count = 0 if signal == :INT || signal == :TERM
         @pids.each do |pid|
           begin
             log_info("Sending signal #{signal} to sidekiq process #{pid}")

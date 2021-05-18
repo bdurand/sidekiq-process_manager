@@ -3,11 +3,10 @@
 require "spec_helper"
 
 describe Sidekiq::ProcessManager::Manager do
-
   let!(:manager) do
     manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, mode: :testing, silent: true)
     Thread.new { manager.start }
-    manager.wait(1)
+    manager.wait(1.0)
     manager
   end
 
@@ -105,13 +104,17 @@ describe Sidekiq::ProcessManager::Manager do
     end
 
     after(:each) do
+      # rubocop:disable Style/GlobalVars
       $prebooted = false
+      # rubocop:enable Style/GlobalVars
       File.unlink(preboot)
     end
 
     it "should load the config/boot.rb file" do
       manager
+      # rubocop:disable Style/GlobalVars
       expect($prebooted).to eq true
+      # rubocop:enable Style/GlobalVars
     end
 
     it "should not call before or after fork hooks on the child processes" do
@@ -120,6 +123,4 @@ describe Sidekiq::ProcessManager::Manager do
       end
     end
   end
-
 end
-

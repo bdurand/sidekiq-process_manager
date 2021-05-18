@@ -7,6 +7,10 @@
 /spec/reports/
 /tmp/
 
+Gemfile.lock
+gemfiles/*.gemfile.lock
+.ruby-version
+
 .DS_Store
 
 # rspec failure tracking

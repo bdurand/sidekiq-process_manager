@@ -1,0 +1,61 @@
+name: Continuous Integration
+on:
+  push:
+    branches:
+      - master
+      - actions-*
+    tags:
+      - v*
+  pull_request:
+env:
+  BUNDLE_CLEAN: "true"
+  BUNDLE_PATH: vendor/bundle
+  BUNDLE_JOBS: 3
+  BUNDLE_RETRY: 3
+jobs:
+  specs:
+    name: ${{ matrix.job }} ruby-${{ matrix.combo.ruby || matrix.ruby }} ${{ matrix.combo.sidekiq && format('sidekiq-{0}', matrix.combo.sidekiq) }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        combo:
+          - sidekiq: "latest"
+            ruby: "3.0"
+          - sidekiq: "6.0"
+            ruby: "2.7"
+          - sidekiq: "5.0"
+            ruby: "2.6"
+          - sidekiq: "5.0"
+            ruby: "2.5"
+          - sidekiq: "4.0"
+            ruby: "2.4"
+          - sidekiq: "3.0"
+            ruby: "2.2.2"
+        job: [ rspec ]
+        include:
+          - job: standardrb
+            ruby: "2.7"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: set up Ruby ${{ matrix.combo.ruby || matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.combo.ruby || matrix.ruby }}
+      - name: setup bundler
+        run: |
+          if [ "${{ matrix.combo.bundler }}" != "" ]; then
+            gem uninstall bundler --all
+            gem install bundler --no-document --version ${{ matrix.combo.bundler }}
+          fi
+          if [ "${{ matrix.combo.sidekiq }}" != "latest" && "${{ matrix.combo.sidekiq }}" != "" ]; then
+            bundle config set gemfile "gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
+          fi
+          bundle update
+      - name: specs
+        if:   matrix.job == 'rspec'
+        run:  bundle exec rake spec
+      - name: standardrb
+        if:   matrix.job == 'standardrb'
+        run:  bundle exec rake standard
