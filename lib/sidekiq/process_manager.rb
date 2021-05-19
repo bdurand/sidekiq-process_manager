@@ -5,7 +5,6 @@ require_relative "process_manager/manager"
 
 module Sidekiq
   module ProcessManager
-
     class << self
       def before_fork(&block)
         @before_fork ||= []
@@ -35,6 +34,5 @@ module Sidekiq
         @after_fork = nil
       end
     end
-
   end
 end

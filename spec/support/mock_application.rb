@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class MockApplication
-
   attr_reader :hooks
 
   def initialize(output: nil, silent: false)
@@ -41,5 +40,4 @@ class MockApplication
       $stdout.flush
     end
   end
-
 end
