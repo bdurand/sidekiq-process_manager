@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for sidekiq >= 6.1
 - Set $0 to "sidekiq" so instrumentation libraries detecting sidekiq server from the command line will work.
 
+### Changed
+- Minimum Ruby version 2.3
+
 ## [1.0.1] - 2020-02-20
 ### Changed
 - Remove auto require of `sidekiq/cli` so `require: false` does not need to be specified in a Gemfile.

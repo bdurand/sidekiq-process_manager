@@ -31,7 +31,7 @@ jobs:
           - sidekiq: "4"
             ruby: "2.4"
           - sidekiq: "3"
-            ruby: "2.2"
+            ruby: "2.3"
         job: [ rspec ]
         include:
           - job: standardrb
@@ -49,14 +49,9 @@ jobs:
             gem uninstall bundler --all
             gem install bundler --no-document --version ${{ matrix.combo.bundler }}
           fi
-          bundle --version
           if [ "${{ matrix.combo.sidekiq }}" != "latest" ] && [ "${{ matrix.combo.sidekiq }}" != "" ]; then
             echo "using gemfile gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
-            if bundle --version | grep "Bundler version 2"; then
-              bundle config set gemfile "gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
-            else
-              sed 's/\.\././g' gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile > Gemfile
-            fi
+            bundle config set gemfile "gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
           fi
           bundle update
       - name: specs
