@@ -49,7 +49,7 @@ jobs:
             gem uninstall bundler --all
             gem install bundler --no-document --version ${{ matrix.combo.bundler }}
           fi
-          if [ "${{ matrix.combo.sidekiq }}" != "latest" && "${{ matrix.combo.sidekiq }}" != "" ]; then
+          if [ "${{ matrix.combo.sidekiq }}" != "latest" ] && [ "${{ matrix.combo.sidekiq }}" != "" ]; then
             bundle config set gemfile "gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
           fi
           bundle update
