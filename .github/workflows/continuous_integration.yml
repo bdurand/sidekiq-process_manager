@@ -22,15 +22,15 @@ jobs:
         combo:
           - sidekiq: "latest"
             ruby: "3.0"
-          - sidekiq: "6.0"
+          - sidekiq: "6"
             ruby: "2.7"
-          - sidekiq: "5.0"
+          - sidekiq: "5"
             ruby: "2.6"
-          - sidekiq: "5.0"
+          - sidekiq: "5"
             ruby: "2.5"
-          - sidekiq: "4.0"
+          - sidekiq: "4"
             ruby: "2.4"
-          - sidekiq: "3.0"
+          - sidekiq: "3"
             ruby: "2.2"
         job: [ rspec ]
         include:
