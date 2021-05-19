@@ -20,7 +20,6 @@ Gem::Specification.new do |spec|
     Gemfile
     Gemfile.lock
     Rakefile
-    bin/
     gemfiles/
     spec/
   ]
