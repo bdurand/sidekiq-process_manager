@@ -52,7 +52,7 @@ jobs:
           bundle --version
           if [ "${{ matrix.combo.sidekiq }}" != "latest" ] && [ "${{ matrix.combo.sidekiq }}" != "" ]; then
             echo "using gemfile gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
-            mv gemfile gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile Gemfile
+            mv gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile Gemfile
             # bundle config set gemfile "gemfiles/sidekiq_${{ matrix.combo.sidekiq }}.gemfile"
           fi
           bundle update
