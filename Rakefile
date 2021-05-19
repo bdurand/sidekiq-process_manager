@@ -27,4 +27,7 @@ namespace :appraisals do
   end
 end
 
-require "standard/rake"
+begin
+  require "standard/rake"
+rescue LoadError
+end
