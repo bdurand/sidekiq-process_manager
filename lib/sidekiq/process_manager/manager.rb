@@ -127,12 +127,16 @@ module Sidekiq
         Sidekiq.options[:pidfile] = false
         if @prefork
           log_info("Pre-forking application")
+          # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
+          save_command_line = $0
+          $0 = File.join(File.dirname($0), "sidekiq")
           # Prior to sidekiq 6.1 the method to boot the application was boot_system
           if @cli.methods.include?(:boot_application) || @cli.private_methods.include?(:boot_application)
             @cli.send(:boot_application)
           else
             @cli.send(:boot_system)
           end
+          $0 = save_command_line
           Sidekiq::ProcessManager.run_before_fork_hooks
         elsif @preboot && !@preboot.empty?
           if ::File.exist?(@preboot)
