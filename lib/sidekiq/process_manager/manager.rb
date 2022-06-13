@@ -1,13 +1,10 @@
 # frozen_string_literal: true
 
 require "sidekiq"
-require "sidekiq/util"
 
 module Sidekiq
   module ProcessManager
     class Manager
-      include Sidekiq::Util
-
       attr_reader :cli
 
       def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
@@ -58,7 +55,9 @@ module Sidekiq
           end
         end
 
-        @signal_thread = safe_thread("signal_handler") do
+        @signal_thread = Thread.new do
+          Thread.current.name = "signal_handler"
+
           while signal_pipe_read.wait_readable
             signal = signal_pipe_read.gets.strip
             send_signal_to_children(signal.to_sym)
