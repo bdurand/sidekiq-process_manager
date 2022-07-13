@@ -5,6 +5,9 @@ require "sidekiq"
 module Sidekiq
   module ProcessManager
     class Manager
+      SIDEKIQ_LT_6_0 = Gem::Version.new(Sidekiq::VERSION) < Gem::Version.new("6.0.0")
+      SIDEKIQ_GTE_6_5_0 = Gem::Version.new(Sidekiq::VERSION) >= Gem::Version.new("6.5.0")
+
       attr_reader :cli
 
       def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
@@ -123,8 +126,11 @@ module Sidekiq
 
       def load_sidekiq
         @cli.parse
-        Sidekiq.options[:daemon] = false
-        Sidekiq.options[:pidfile] = false
+        # daemon and pidfile options were removed in Sidekiq 6.0
+        if SIDEKIQ_LT_6_0
+          Sidekiq.options[:daemon] = false
+          Sidekiq.options[:pidfile] = false
+        end
         if @prefork
           log_info("Pre-forking application")
           # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
@@ -148,7 +154,8 @@ module Sidekiq
       end
 
       def set_program_name!
-        $PROGRAM_NAME = "sidekiq process manager #{Sidekiq.options[:tag]} [#{@pids.size} processes]"
+        tag = SIDEKIQ_GTE_6_5_0 ? Sidekiq[:tag] : Sidekiq.options[:tag]
+        $PROGRAM_NAME = "sidekiq process manager #{tag} [#{@pids.size} processes]"
       end
 
       def start_child_process!
