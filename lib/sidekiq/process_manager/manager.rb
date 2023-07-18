@@ -149,7 +149,7 @@ module Sidekiq
       # @return [void]
       # @api private
       def kill(pid)
-        Process.kill(:TERM, pid)
+        ::Process.kill(:TERM, pid)
       end
 
       private
