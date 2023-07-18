@@ -16,3 +16,5 @@ RSpec.configure do |config|
 end
 
 Sidekiq.logger.level = :error
+sidekiq_options = (Sidekiq.respond_to?(:default_configuration) ? Sidekiq.default_configuration : Sidekiq.options)
+sidekiq_options[:timeout] = 0.1
