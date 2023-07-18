@@ -27,7 +27,7 @@ module Sidekiq
 
         @prefork = (prefork && process_count > 1)
         @preboot = preboot if process_count > 1 && !prefork
-        @max_memory = ((max_memory.to_i >= 0) ? max_memory.to_i : nil)
+        @max_memory = ((max_memory.to_i > 0) ? max_memory.to_i : nil)
 
         if mode == :testing
           require_relative "../../../spec/support/mocks"
@@ -156,9 +156,9 @@ module Sidekiq
 
       def log_info(message)
         return if @silent
-        if $stdout.tty?
-          $stdout.write("#{message}#{$/}")
-          $stdout.flush
+        if $stderr.tty?
+          $stderr.write("#{message}#{$/}")
+          $stderr.flush
         else
           Sidekiq.logger.info(message)
         end

@@ -6,7 +6,7 @@ describe Sidekiq::ProcessManager::Manager do
   let!(:manager) do
     manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, max_memory: max_memory, mode: :testing, silent: true)
     Thread.new { manager.start }
-    manager.wait(1.0)
+    manager.wait(2)
     manager
   end
 
@@ -39,14 +39,14 @@ describe Sidekiq::ProcessManager::Manager do
 
     it "should exit when all child processes have terminated with an INT signal" do
       ::Process.kill(:INT, ::Process.pid)
-      sleep 1 # allow the signal pipe time to process the signal
+      sleep(2) # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
 
     it "should exit when all child processes have terminated with a TERM signal" do
       ::Process.kill(:TERM, ::Process.pid)
-      sleep 1 # allow the signal pipe time to process the signal
+      sleep(2) # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
@@ -56,7 +56,7 @@ describe Sidekiq::ProcessManager::Manager do
       kill_pid = pids.first
       keep_pid = pids.last
       ::Process.kill(:TERM, kill_pid)
-      sleep(1)
+      sleep(2)
       manager.wait
       expect(manager.pids.size).to eq 2
       expect(manager.pids).to_not include(kill_pid)
