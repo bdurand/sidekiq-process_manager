@@ -17,7 +17,7 @@ describe Sidekiq::ProcessManager::Manager do
 
   after do
     manager.stop
-    manager.wait(5)
+    manager.wait(10)
   end
 
   describe "managing processes" do
