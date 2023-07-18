@@ -233,7 +233,7 @@ module Sidekiq
       end
 
       def start_memory_monitor
-        log_info("Starting memory monitor with max memory #{(@max_memory / (1024 ** 2)).round}mb")
+        log_info("Starting memory monitor with max memory #{(@max_memory / (1024**2)).round}mb")
 
         @memory_monitor = Thread.new do
           Thread.current.name = "memory-monitor"
