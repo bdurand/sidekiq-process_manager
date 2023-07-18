@@ -62,12 +62,21 @@ module Sidekiq
 
         master_pid = ::Process.pid
 
+        signal_pipe_read, signal_pipe_write = IO.pipe
+
         # Trap signals that will be forwarded to child processes
         [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
           ::Signal.trap(signal) do
-            if ::Process.pid == master_pid
-              send_signal_to_children(signal)
-            end
+            signal_pipe_write.puts(signal) if ::Process.pid == master_pid
+          end
+        end
+
+        @signal_thread = Thread.new do
+          Thread.current.name = "signal_handler"
+
+          while signal_pipe_read.wait_readable
+            signal = signal_pipe_read.gets.strip
+            send_signal_to_children(signal.to_sym)
           end
         end
 

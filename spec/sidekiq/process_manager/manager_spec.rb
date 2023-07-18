@@ -39,12 +39,14 @@ describe Sidekiq::ProcessManager::Manager do
 
     it "should exit when all child processes have terminated with an INT signal" do
       ::Process.kill(:INT, ::Process.pid)
+      sleep 1 # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
 
     it "should exit when all child processes have terminated with a TERM signal" do
       ::Process.kill(:TERM, ::Process.pid)
+      sleep 1 # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
