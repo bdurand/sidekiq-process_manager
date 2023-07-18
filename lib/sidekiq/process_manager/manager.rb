@@ -1,13 +1,24 @@
 # frozen_string_literal: true
 
 require "sidekiq"
+require "get_process_mem"
 
 module Sidekiq
   module ProcessManager
+    # Process manager for sidekiq. This class is responsible for starting and monitoring
+    # that the specified number of sidekiq processes are running. It will also forward
+    # signals sent to the main process to the child processes.
     class Manager
       attr_reader :cli
 
-      def initialize(process_count: 1, prefork: false, preboot: nil, mode: nil, silent: false)
+      # Create a new process manager.
+      #
+      # @param process_count [Integer] The number of sidekiq processes to start.
+      # @param prefork [Boolean] If true, the process manager will load the application before forking.
+      # @param preboot [String] If set, the process manager will require the specified file before forking the child processes.
+      # @param mode [Symbol] If set to :testing, the process manager will use a mock CLI.
+      # @param silent [Boolean] If true, the process manager will not output any messages.
+      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, mode: nil, silent: false)
         require "sidekiq/cli"
 
         # Get the number of processes to fork
@@ -16,19 +27,22 @@ module Sidekiq
 
         @prefork = (prefork && process_count > 1)
         @preboot = preboot if process_count > 1 && !prefork
+        @max_memory = ((max_memory.to_i >= 0) ? max_memory.to_i : nil)
 
         if mode == :testing
           require_relative "../../../spec/support/mocks"
           @cli = MockSidekiqCLI.new(silent)
+          @memory_check_interval = 1
         else
           @cli = Sidekiq::CLI.instance
+          @memory_check_interval = 60
         end
 
         @silent = silent
         @pids = []
         @terminated_pids = []
         @started = false
-        @monitor = Monitor.new
+        @mutex = Mutex.new
       end
 
       # Start the process manager. This method will start the specified number
@@ -38,6 +52,8 @@ module Sidekiq
       #
       # Child processes are manged by sending the signals you would normally send
       # to a sidekiq process to the process manager instead.
+      #
+      # @return [void]
       def start
         raise "Process manager already started" if started?
         @started = true
@@ -64,9 +80,16 @@ module Sidekiq
           end
         end
 
+        GC.start
+        GC.compact if GC.respond_to?(:compact)
+        # I'm not sure why, but running GC operations blocks until we try to write some I/O.
+        File.write("/dev/null", "0")
+
         @process_count.times do
           start_child_process!
         end
+
+        start_memory_monitor if @max_memory
 
         log_info("Process manager started with pid #{::Process.pid}")
         monitor_child_processes
@@ -85,18 +108,36 @@ module Sidekiq
       end
 
       # Helper to gracefully stop all child processes.
+      #
+      # @return [void]
       def stop
+        stop_memory_monitor
         @process_count = 0
         send_signal_to_children(:TSTP)
         send_signal_to_children(:TERM)
       end
 
+      # Get all chile process pids.
+      #
+      # @return [Array<Integer>]
       def pids
-        @pids.dup
+        @mutex.synchronize { @pids.dup }
       end
 
+      # Return true if the process manager has started.
+      #
+      # @return [Boolean]
       def started?
         @started
+      end
+
+      # Kill a child process by sending the TERM signal to it.
+      #
+      # @param pid [Integer] The pid of the child process to kill.
+      # @return [void]
+      # @api private
+      def kill(pid)
+        Process.kill(:TERM, pid)
       end
 
       private
@@ -121,10 +162,23 @@ module Sidekiq
         end
       end
 
+      def sidekiq_options
+        if Sidekiq.respond_to?(:default_configuration)
+          Sidekiq.default_configuration
+        else
+          Sidekiq.options
+        end
+      end
+
       def load_sidekiq
         @cli.parse
-        Sidekiq.options[:daemon] = false
-        Sidekiq.options[:pidfile] = false
+
+        # Disable daemonization and pidfile creation for child processes (sidekiq < 6.0)
+        if Sidekiq::VERSION.to_f < 6.0
+          sidekiq_options[:daemon] = false
+          sidekiq_options[:pidfile] = false
+        end
+
         if @prefork
           log_info("Pre-forking application")
           # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
@@ -148,11 +202,11 @@ module Sidekiq
       end
 
       def set_program_name!
-        $PROGRAM_NAME = "sidekiq process manager #{Sidekiq.options[:tag]} [#{@pids.size} processes]"
+        $PROGRAM_NAME = "sidekiq process manager #{sidekiq_options[:tag]} [#{@pids.size} processes]"
       end
 
       def start_child_process!
-        @pids << fork do
+        pid = fork do
           # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
           $0 = File.join(File.dirname($0), "sidekiq")
           @process_count = 0
@@ -160,7 +214,8 @@ module Sidekiq
           Sidekiq::ProcessManager.run_after_fork_hooks
           @cli.run
         end
-        log_info("Forked sidekiq process with pid #{@pids.last}")
+        @mutex.synchronize { @pids << pid }
+        log_info("Forked sidekiq process with pid #{pids}")
         set_program_name!
       end
 
@@ -177,16 +232,43 @@ module Sidekiq
         end
       end
 
+      def start_memory_monitor
+        @memory_monitory = Thread.new do
+          loop do
+            sleep(@memory_check_interval)
+
+            pids.each do |pid|
+              begin
+                memory = GetProcessMem.new(pid)
+                if memory.bytes > @max_memory
+                  log_warning("Kill bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
+                  kill(pid)
+                end
+              rescue => e
+                log_warning("Error monitoring memory for sidekiq process #{pid}: #{e.inspect}")
+              end
+            end
+          end
+        end
+      end
+
+      def stop_memory_monitor
+        if defined?(@memory_monitor) && @memory_monitor
+          @memory_monitor.kill
+        end
+      end
+
       # Listen for child processes dying and restart if necessary.
       def monitor_child_processes
         loop do
           pid = ::Process.wait
-          @pids.delete(pid)
+          @mutex.synchronize { @pids.delete(pid) }
+
           log_info("Sidekiq process #{pid} exited")
 
           # If there are not enough processes running, start a replacement one.
           if @process_count > @pids.size
-            start_child_process! if @pids.size < @process_count
+            start_child_process!
           end
 
           set_program_name!

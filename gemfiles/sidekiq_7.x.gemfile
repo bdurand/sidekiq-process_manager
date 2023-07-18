@@ -5,6 +5,7 @@ source "https://rubygems.org"
 gem "rake"
 gem "rspec", "~>3.0"
 gem "appraisal"
-gem "sidekiq", "~> 3.0"
+gem "standard", "~>1.0", require: false
+gem "sidekiq", "~> 7.0"
 
 gemspec path: "../"
