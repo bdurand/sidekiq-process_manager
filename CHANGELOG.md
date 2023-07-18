@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Sidekiq < 5.0 support.
-- Ruby < 2.6 support.
+- Ruby < 2.5 support.
 
 ## [1.0.4] - 2021-05-20
 
