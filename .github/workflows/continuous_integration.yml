@@ -26,21 +26,21 @@ jobs:
         include:
           - ruby: "ruby"
             standardrb: true
-          - ruby: "3.1"
+          - ruby: "3.2"
             appraisal: "sidekiq_7.x"
-          - ruby: "3.0"
+          - ruby: "3.1"
             appraisal: "sidekiq_7.0"
           - ruby: "3.0"
             appraisal: "sidekiq_6.x"
           - ruby: "2.7"
             appraisal: "sidekiq_6.0"
-          - ruby: "2.6"
+          - ruby: "2.7"
             appraisal: "sidekiq_5.x"
-          - ruby: "2.5"
+          - ruby: "2.6"
             appraisal: "sidekiq_5.0"
-          - ruby: "2.4"
+          - ruby: "2.5"
             appraisal: "sidekiq_4.x"
-          - ruby: "2.3"
+          - ruby: "2.4"
             appraisal: "sidekiq_3.x"
     steps:
     - uses: actions/checkout@v2
