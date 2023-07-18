@@ -13,6 +13,8 @@ require_relative "support/mocks"
 
 RSpec.configure do |config|
   config.order = :random
+  config.default_retry_count = 2
+  config.default_sleep_interval = 1
 end
 
 Sidekiq.logger.level = :error

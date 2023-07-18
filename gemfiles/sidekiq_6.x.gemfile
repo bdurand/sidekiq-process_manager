@@ -3,6 +3,7 @@
 source "https://rubygems.org"
 
 gem "rspec", "~> 3.0"
+gem "rspec-retry"
 gem "rake"
 gem "standard", "~>1.0"
 gem "pry-byebug"
