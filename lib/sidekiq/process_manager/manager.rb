@@ -101,8 +101,8 @@ module Sidekiq
       # @param timeout [Integer] The number of seconds to wait for child processes to start.
       # @return [void]
       def wait(timeout = 5)
-        start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        while Process.clock_gettime(Process::CLOCK_MONOTONIC) < start_time + timeout
+        timeout_time = monotonic_time + timeout
+        while monotonic_time <= timeout_time
           return if @pids.size == @process_count
           sleep(0.01)
         end
@@ -163,6 +163,10 @@ module Sidekiq
         else
           Sidekiq.logger.warn(message)
         end
+      end
+
+      def monotonic_time
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
 
       def sidekiq_options
