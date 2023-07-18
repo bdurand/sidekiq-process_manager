@@ -116,18 +116,19 @@ describe Sidekiq::ProcessManager::Manager do
   end
 
   describe "with pre-booting code" do
-    let(:preboot) do
+    let(:preboot_file) do
       file = Tempfile.new(["preboot", ".rb"])
       file.write("$prebooted = true")
       file.flush
-      file.path
+      file
     end
+    let(:preboot) { preboot_file.path }
 
     after(:each) do
       # rubocop:disable Style/GlobalVars
       $prebooted = false
       # rubocop:enable Style/GlobalVars
-      File.unlink(preboot) if File.exist?(preboot)
+      preboot_file.close
     end
 
     it "should load the config/boot.rb file" do
