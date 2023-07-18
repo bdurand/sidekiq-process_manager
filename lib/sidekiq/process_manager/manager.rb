@@ -85,10 +85,7 @@ module Sidekiq
         # Ensure that child processes receive the term signal when the master process exits.
         at_exit do
           if ::Process.pid == master_pid && @process_count > 0
-            @process_count = 0
-            @pids.each do |pid|
-              send_signal_to_children(:TERM)
-            end
+            send_signal_to_children(:TERM)
           end
         end
 
@@ -252,6 +249,7 @@ module Sidekiq
             log_warning("Error sending signal #{signal} to sidekiq process #{pid}: #{e.inspect}")
           end
         end
+        wait_for_children_to_exit(pids) if @process_count == 0
       end
 
       def start_memory_monitor
@@ -281,6 +279,29 @@ module Sidekiq
       def stop_memory_monitor
         if defined?(@memory_monitor) && @memory_monitor
           @memory_monitor.kill
+        end
+      end
+
+      def wait_for_children_to_exit(pids)
+        timeout = monotonic_time + (sidekiq_options[:timeout] || 25).to_f
+        pids.each do |pid|
+          while monotonic_time < timeout
+            break unless process_alive?(pid)
+            sleep(0.01)
+          end
+        end
+
+        pids.each do |pid|
+          ::Process.kill(:INT, pid) if process_alive?(pid)
+        end
+      end
+
+      def process_alive?(pid)
+        begin
+          ::Process.getpgid(pid)
+          true
+        rescue Errno::ESRCH
+          false
         end
       end
 
