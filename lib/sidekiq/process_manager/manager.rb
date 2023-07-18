@@ -103,7 +103,7 @@ module Sidekiq
       def wait(timeout = 5)
         start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         while Process.clock_gettime(Process::CLOCK_MONOTONIC) < start_time + timeout
-          return if @pids.size >= @process_count
+          return if @pids.size == @process_count
           sleep(0.01)
         end
 
