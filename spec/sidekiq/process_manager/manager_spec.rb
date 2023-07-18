@@ -79,7 +79,9 @@ describe Sidekiq::ProcessManager::Manager do
       sleep(2)
       manager.wait
       # This check is flakey with Sidekiq 6.0 and below
-      expect(manager.pids & pids).to be_empty if Sidekiq::VERSION.to_f > 6.5
+      if Gem::Version.new(Sidekiq::VERSION) >= Gem::Version.new("6.5")
+        expect(manager.pids & pids).to be_empty
+      end
     end
   end
 

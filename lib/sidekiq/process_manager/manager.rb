@@ -174,7 +174,7 @@ module Sidekiq
         @cli.parse
 
         # Disable daemonization and pidfile creation for child processes (sidekiq < 6.0)
-        if Sidekiq::VERSION.to_f < 6.0
+        if Gem::Version.new(Sidekiq::VERSION) < Gem::Version.new("6.0")
           sidekiq_options[:daemon] = false
           sidekiq_options[:pidfile] = false
         end
@@ -234,6 +234,7 @@ module Sidekiq
 
       def start_memory_monitor
         @memory_monitory = Thread.new do
+          Thread.current.name = "memory-monitor"
           loop do
             sleep(@memory_check_interval)
 
