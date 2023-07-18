@@ -6,7 +6,7 @@ describe Sidekiq::ProcessManager::Manager do
   let!(:manager) do
     manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, max_memory: max_memory, mode: :testing, silent: true)
     Thread.new { manager.start }
-    manager.wait(1.0)
+    manager.wait(2)
     manager
   end
 
@@ -39,14 +39,14 @@ describe Sidekiq::ProcessManager::Manager do
 
     it "should exit when all child processes have terminated with an INT signal" do
       ::Process.kill(:INT, ::Process.pid)
-      sleep 1 # allow the signal pipe time to process the signal
+      sleep(2) # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
 
     it "should exit when all child processes have terminated with a TERM signal" do
       ::Process.kill(:TERM, ::Process.pid)
-      sleep 1 # allow the signal pipe time to process the signal
+      sleep(2) # allow the signal pipe time to process the signal
       manager.wait
       expect(manager.pids.size).to eq 0
     end
@@ -56,7 +56,7 @@ describe Sidekiq::ProcessManager::Manager do
       kill_pid = pids.first
       keep_pid = pids.last
       ::Process.kill(:TERM, kill_pid)
-      sleep(1)
+      sleep(2)
       manager.wait
       expect(manager.pids.size).to eq 2
       expect(manager.pids).to_not include(kill_pid)
@@ -74,15 +74,13 @@ describe Sidekiq::ProcessManager::Manager do
     it "should restart child processes if they use too much memory" do
       pids = manager.pids
       expect(pids.size).to eq 2
-      pids.each do |pid|
-        allow(manager).to receive(:kill).and_call_original
-        expect(manager).to receive(:kill).with(pid).and_call_original
-      end
+      allow(manager).to receive(:kill).and_call_original
+      expect(manager).to receive(:kill).with(pids.first).and_call_original
       sleep(2)
       manager.wait
       # This check is flakey with Sidekiq 6.0 and below
       if Gem::Version.new(Sidekiq::VERSION) >= Gem::Version.new("6.5")
-        expect(manager.pids & pids).to be_empty
+        expect(manager.pids).to_not include(pids.first)
       end
     end
   end
@@ -118,18 +116,19 @@ describe Sidekiq::ProcessManager::Manager do
   end
 
   describe "with pre-booting code" do
-    let(:preboot) do
+    let(:preboot_file) do
       file = Tempfile.new(["preboot", ".rb"])
       file.write("$prebooted = true")
       file.flush
-      file.path
+      file
     end
+    let(:preboot) { preboot_file.path }
 
     after(:each) do
       # rubocop:disable Style/GlobalVars
       $prebooted = false
       # rubocop:enable Style/GlobalVars
-      File.unlink(preboot) if File.exist?(preboot)
+      preboot_file.close
     end
 
     it "should load the config/boot.rb file" do

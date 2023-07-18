@@ -27,7 +27,7 @@ module Sidekiq
 
         @prefork = (prefork && process_count > 1)
         @preboot = preboot if process_count > 1 && !prefork
-        @max_memory = ((max_memory.to_i >= 0) ? max_memory.to_i : nil)
+        @max_memory = ((max_memory.to_i > 0) ? max_memory.to_i : nil)
 
         if mode == :testing
           require_relative "../../../spec/support/mocks"
@@ -62,20 +62,22 @@ module Sidekiq
 
         master_pid = ::Process.pid
 
-        signal_pipe_read, signal_pipe_write = IO.pipe
+        @signal_pipe_read, @signal_pipe_write = IO.pipe
 
         # Trap signals that will be forwarded to child processes
         [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
           ::Signal.trap(signal) do
-            signal_pipe_write.puts(signal) if ::Process.pid == master_pid
+            if ::Process.pid == master_pid
+              @signal_pipe_write.puts(signal)
+            end
           end
         end
 
         @signal_thread = Thread.new do
-          Thread.current.name = "signal_handler"
+          Thread.current.name = "signal-handler"
 
-          while signal_pipe_read.wait_readable
-            signal = signal_pipe_read.gets.strip
+          while @signal_pipe_read.wait_readable
+            signal = @signal_pipe_read.gets.strip
             send_signal_to_children(signal.to_sym)
           end
         end
@@ -83,9 +85,7 @@ module Sidekiq
         # Ensure that child processes receive the term signal when the master process exits.
         at_exit do
           if ::Process.pid == master_pid && @process_count > 0
-            @pids.each do |pid|
-              send_signal_to_children(:TERM)
-            end
+            send_signal_to_children(:TERM)
           end
         end
 
@@ -156,9 +156,9 @@ module Sidekiq
 
       def log_info(message)
         return if @silent
-        if $stdout.tty?
-          $stdout.write("#{message}#{$/}")
-          $stdout.flush
+        if $stderr.tty?
+          $stderr.write("#{message}#{$/}")
+          $stderr.flush
         else
           Sidekiq.logger.info(message)
         end
@@ -227,6 +227,9 @@ module Sidekiq
           $0 = File.join(File.dirname($0), "sidekiq")
           @process_count = 0
           @pids.clear
+          @signal_thread.kill
+          @signal_pipe_read.close
+          @signal_pipe_write.close
           Sidekiq::ProcessManager.run_after_fork_hooks
           @cli.run
         end
@@ -238,7 +241,7 @@ module Sidekiq
       def send_signal_to_children(signal)
         log_info("Process manager trapped signal #{signal}")
         @process_count = 0 if signal == :INT || signal == :TERM
-        @pids.each do |pid|
+        pids.each do |pid|
           begin
             log_info("Sending signal #{signal} to sidekiq process #{pid}")
             ::Process.kill(signal, pid)
@@ -246,6 +249,7 @@ module Sidekiq
             log_warning("Error sending signal #{signal} to sidekiq process #{pid}: #{e.inspect}")
           end
         end
+        wait_for_children_to_exit(pids) if @process_count == 0
       end
 
       def start_memory_monitor
@@ -262,6 +266,7 @@ module Sidekiq
                 if memory.bytes > @max_memory
                   log_warning("Kill bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
                   kill(pid)
+                  break
                 end
               rescue => e
                 log_warning("Error monitoring memory for sidekiq process #{pid}: #{e.inspect}")
@@ -274,6 +279,29 @@ module Sidekiq
       def stop_memory_monitor
         if defined?(@memory_monitor) && @memory_monitor
           @memory_monitor.kill
+        end
+      end
+
+      def wait_for_children_to_exit(pids)
+        timeout = monotonic_time + (sidekiq_options[:timeout] || 25).to_f
+        pids.each do |pid|
+          while monotonic_time < timeout
+            break unless process_alive?(pid)
+            sleep(0.01)
+          end
+        end
+
+        pids.each do |pid|
+          ::Process.kill(:INT, pid) if process_alive?(pid)
+        end
+      end
+
+      def process_alive?(pid)
+        begin
+          ::Process.getpgid(pid)
+          true
+        rescue Errno::ESRCH
+          false
         end
       end
 

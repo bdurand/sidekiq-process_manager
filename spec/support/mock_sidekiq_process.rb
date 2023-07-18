@@ -22,12 +22,22 @@ class MockSidekiqProcess
       end
     end
 
+    timeout_time = monotonic_time + 10
     while running?
       sleep(0.01)
+      if monotonic_time > timeout_time
+        @running = false
+      end
     end
   end
 
   def running?
     @running
+  end
+
+  private
+
+  def monotonic_time
+    ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
   end
 end
