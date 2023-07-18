@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sidekiq 7 support.
 - Max memory setting to automatically restart processes suffering from memory bloat.
 
+### Removed
+- Sidekiq 3 support.
+- Ruby 2.3 and 2.4 support.
+
 ## [1.0.4] - 2021-05-20
 
 ### Fixed
