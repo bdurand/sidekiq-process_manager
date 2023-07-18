@@ -97,10 +97,13 @@ module Sidekiq
       end
 
       # Helper to wait on the manager to wait on child processes to start up.
+      #
+      # @param timeout [Integer] The number of seconds to wait for child processes to start.
+      # @return [void]
       def wait(timeout = 5)
-        start_time = Time.now
-        while Time.now < start_time + timeout
-          return if @pids.size == @process_count
+        start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        while Process.clock_gettime(Process::CLOCK_MONOTONIC) < start_time + timeout
+          return if @pids.size >= @process_count
           sleep(0.01)
         end
 
