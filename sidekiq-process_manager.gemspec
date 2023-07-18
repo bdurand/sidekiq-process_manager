@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require_relative "lib/sidekiq/process_manager/version"
-
 Gem::Specification.new do |spec|
   spec.name = "sidekiq-process_manager"
-  spec.version = Sidekiq::ProcessManager::VERSION
+  spec.version = File.read(File.expand_path("VERSION", __dir__)).strip
   spec.authors = ["Brian Durand"]
   spec.email = ["bbdurand@gmail.com"]
 
@@ -31,9 +29,10 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.required_ruby_version = ">= 2.3"
+  spec.required_ruby_version = ">= 2.6"
 
-  spec.add_dependency "sidekiq", ">= 3.0"
+  spec.add_dependency "sidekiq", ">= 5.0"
+  spec.add_dependency "get_process_mem"
 
   spec.add_development_dependency "bundler"
 end

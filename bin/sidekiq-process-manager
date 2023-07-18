@@ -6,10 +6,27 @@ require_relative "../lib/sidekiq-process_manager"
 
 DEFAULT_PROCESS_COUNT = 1
 
+def parse_max_memory(max_memory)
+  value = nil
+
+  matched = max_memory.to_s.match(/\A([\d]+(?:\.[\d]+)?)([mg])\z/i)
+  if matched
+    value = matched[1].to_f
+    if matched[2].downcase == 'm'
+      value *= 1024 * 1024
+    elsif matched[2].downcase == 'g'
+      value *= 1024 * 1024 * 1024
+    end
+  end
+
+  value
+end
+
 options = {
   process_count: Integer(ENV.fetch('SIDEKIQ_PROCESSES', DEFAULT_PROCESS_COUNT)),
   prefork: !ENV.fetch("SIDEKIQ_PREFORK", "").empty?,
   preboot: ENV["SIDEKIQ_PREBOOT"],
+  max_memory: parse_max_memory(ENV["SIDEKIQ_MAX_MEMORY"]),
   mode: nil,
 }
 
@@ -26,6 +43,10 @@ parser = OptionParser.new do |opts|
 
   opts.on('--preboot FILE', "Preboot the processes (can also specify with SIDEKIQ_PREBOOT)") do |preboot|
     options[:preboot] = preboot
+  end
+
+  opts.on('--max-memory MEMORY', "Max memory for each process (can also specify with SIDEKIQ_MAX_MEMORY); suffix with m or g to specify megabytes or gigabytes") do |max_memory|
+    options[:max_memory] = parse_max_memory(max_memory)
   end
 
   opts.on('--testing', "Enable test mode") do |testing|

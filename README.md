@@ -42,6 +42,10 @@ If your application can't be pre-forked, you can at least load the gem files and
 
 For a Rails application, you would normally want to preboot the `config/boot.rb` file.
 
+## Memory Bloat
+
+You can also specify a maximum memory footprint that you want to allow for each child process. You can use this feature to automatically guard against poorly designed workers that bloat the Ruby memory heap. Note that you can also use an external process monitor to kill processes with memory bloat; the process manager will restart any process regardless of how it dies.
+
 ## Usage
 
 Install the gem in your sidekiq process and run it with `bundle exec sidekiq-process-manager` or, if you use [bundle binstubs](https://bundler.io/man/bundle-binstubs.1.html), `bin/sidekiq-process-manager`. Command line arguments are passed through to `sidekiq`. If you want to supply on of the `sidekiq-process_manager` specific options, those options should come first and the `sidekiq` options should appear after a `--` flag
@@ -93,6 +97,18 @@ or
 SIDEKIQ_PREBOOT=config/boot.rb SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
+You can set the maximum memory allowed per sidekiq process with the `--max-memory` argument or with the `SIDEKIQ_MAX_MEMORY` environment variable. You can suffix the value with "m" to specify megabytes or "g" to specify gigabytes.
+
+```bash
+bundle exec sidekiq-process-manager --processes 4 --max-memory 2g
+```
+
+or
+
+```bash
+SIDEKIQ_MAX_MEMORY=2000m SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
+```
+
 ## Alternatives
 
 Any process manager can be an alternative (service, update, systemd, monit, god, etc.).
@@ -103,4 +119,32 @@ The advantages this gem can provide are:
 
 2. Running in the foreground with output going to standard out instead of as daemon can integrate better into containerized environments.
 
-3. Built with sidekiq in mind so signal passing is consistent.
+3. Built with sidekiq in mind so signal passing is consistent with signals used when running a simple sidekiq process.
+
+## Installation
+
+Add this line to your application's Gemfile:
+
+```ruby
+gem "sidekiq-process_manager", require: false
+```
+
+Then execute:
+```bash
+$ bundle
+```
+
+Or install it yourself as:
+```bash
+$ gem install sidekiq-process_manager
+```
+
+## Contributing
+
+Open a pull request on [GitHub](https://github.com/bdurand/sidekiq-process_manager).
+
+Please use the [standardrb](https://github.com/testdouble/standard) syntax and lint your code with `standardrb --fix` before submitting.
+
+## License
+
+The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).

@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe Sidekiq::ProcessManager::Manager do
   let!(:manager) do
-    manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, mode: :testing, silent: true)
+    manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, max_memory: max_memory, mode: :testing, silent: true)
     Thread.new { manager.start }
     manager.wait(1.0)
     manager
@@ -13,6 +13,7 @@ describe Sidekiq::ProcessManager::Manager do
   let(:prefork) { false }
   let(:preboot) { nil }
   let(:process_count) { 2 }
+  let(:max_memory) { nil }
 
   after do
     manager.stop
@@ -65,6 +66,25 @@ describe Sidekiq::ProcessManager::Manager do
     end
   end
 
+  describe "with max memory set for child processes" do
+    let(:max_memory) { 1024 * 1024 }
+
+    it "should restart child processes if they use too much memory" do
+      pids = manager.pids
+      expect(pids.size).to eq 2
+      pids.each do |pid|
+        allow(manager).to receive(:kill).and_call_original
+        expect(manager).to receive(:kill).with(pid).and_call_original
+      end
+      sleep(2)
+      manager.wait
+      # This check is flakey with Sidekiq 6.0 and below
+      if Gem::Version.new(Sidekiq::VERSION) >= Gem::Version.new("6.5")
+        expect(manager.pids & pids).to be_empty
+      end
+    end
+  end
+
   describe "without pre-forking processes" do
     it "should not preload the application" do
       expect(manager.cli.application).to eq nil
@@ -107,7 +127,7 @@ describe Sidekiq::ProcessManager::Manager do
       # rubocop:disable Style/GlobalVars
       $prebooted = false
       # rubocop:enable Style/GlobalVars
-      File.unlink(preboot)
+      File.unlink(preboot) if File.exist?(preboot)
     end
 
     it "should load the config/boot.rb file" do

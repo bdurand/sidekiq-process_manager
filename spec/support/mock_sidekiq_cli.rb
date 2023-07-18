@@ -48,8 +48,8 @@ class MockSidekiqCLI
 
   private
 
-  class_eval <<~RUBY, __FILE__, __LINE__ + 1
-    def #{Sidekiq::VERSION.to_f < 6.0 ? "boot_system" : "boot_application"}
+  class_eval <<-RUBY, __FILE__, __LINE__ + 1
+    def #{(Sidekiq::VERSION.to_f < 6.0) ? "boot_system" : "boot_application"}
       boot_mock_application
     end
   RUBY

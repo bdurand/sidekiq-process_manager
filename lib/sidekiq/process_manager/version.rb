@@ -2,6 +2,6 @@
 
 module Sidekiq
   module ProcessManager
-    VERSION = "1.0.4"
+    VERSION = File.read(File.expand_path("../../../VERSION", __dir__)).strip
   end
 end

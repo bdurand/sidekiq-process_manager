@@ -1,16 +1,18 @@
-require "bundler/setup"
-require "sidekiq/process_manager"
+# frozen_string_literal: true
+
+ENV["BUNDLE_GEMFILE"] ||= File.expand_path("../Gemfile", __dir__)
+
+require "bundler/setup" if File.exist?(ENV["BUNDLE_GEMFILE"])
+
+Bundler.require(:default, :test)
+
 require "tempfile"
 
+require_relative "../lib/sidekiq-process_manager"
 require_relative "support/mocks"
 
 RSpec.configure do |config|
-  # Enable flags like --only-failures and --next-failure
-  config.example_status_persistence_file_path = ".rspec_status"
-
-  config.expect_with :rspec do |c|
-    c.syntax = :expect
-  end
+  config.order = :random
 end
 
 Sidekiq.logger.level = :error
