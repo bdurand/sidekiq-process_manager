@@ -27,4 +27,3 @@ end
 appraise "sidekiq-4.x" do
   gem "sidekiq", "~> 4.0"
 end
-
