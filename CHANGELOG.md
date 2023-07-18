@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Sidekiq 7 support.
 - Max memory setting to automatically restart processes suffering from memory bloat.
+- Use a notification pipe to handle signals (@KevinCarterDev)
 
 ### Removed
 - Sidekiq < 5.0 support.
