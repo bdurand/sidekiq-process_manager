@@ -215,7 +215,7 @@ module Sidekiq
           @cli.run
         end
         @mutex.synchronize { @pids << pid }
-        log_info("Forked sidekiq process with pid #{pids}")
+        log_info("Forked sidekiq process with pid #{pid}")
         set_program_name!
       end
 
@@ -233,6 +233,8 @@ module Sidekiq
       end
 
       def start_memory_monitor
+        log_info("Starting memory monitor with max memory #{(@max_memory / (1024 ** 2)).round}mb")
+
         @memory_monitor = Thread.new do
           Thread.current.name = "memory-monitor"
           loop do
