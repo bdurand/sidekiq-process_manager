@@ -233,7 +233,7 @@ module Sidekiq
       end
 
       def start_memory_monitor
-        @memory_monitory = Thread.new do
+        @memory_monitor = Thread.new do
           Thread.current.name = "memory-monitor"
           loop do
             sleep(@memory_check_interval)
