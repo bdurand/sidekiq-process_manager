@@ -64,21 +64,25 @@ module Sidekiq
 
         @signal_pipe_read, @signal_pipe_write = IO.pipe
 
+        @signal_thread = Thread.new do
+          Thread.current.name = "signal-handler"
+
+          while @signal_pipe_read.wait_readable
+            begin
+              signal = @signal_pipe_read.gets.strip
+              send_signal_to_children(signal.to_sym)
+            rescue => e
+              log_error("Error handling signal #{signal}: #{e.message}")
+            end
+          end
+        end
+
         # Trap signals that will be forwarded to child processes
         [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
           ::Signal.trap(signal) do
             if ::Process.pid == master_pid
               @signal_pipe_write.puts(signal)
             end
-          end
-        end
-
-        @signal_thread = Thread.new do
-          Thread.current.name = "signal-handler"
-
-          while @signal_pipe_read.wait_readable
-            signal = @signal_pipe_read.gets.strip
-            send_signal_to_children(signal.to_sym)
           end
         end
 
@@ -141,15 +145,6 @@ module Sidekiq
       # @return [Boolean]
       def started?
         @started
-      end
-
-      # Kill a child process by sending the TERM signal to it.
-      #
-      # @param pid [Integer] The pid of the child process to kill.
-      # @return [void]
-      # @api private
-      def kill(pid)
-        ::Process.kill(:TERM, pid)
       end
 
       private
@@ -265,7 +260,11 @@ module Sidekiq
                 memory = GetProcessMem.new(pid)
                 if memory.bytes > @max_memory
                   log_warning("Kill bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
-                  kill(pid)
+                  begin
+                    ::Process.kill(:TERM, pid)
+                  rescue Errno::ESRCH
+                    # The process is already dead
+                  end
                   break
                 end
               rescue => e
@@ -292,7 +291,11 @@ module Sidekiq
         end
 
         pids.each do |pid|
-          ::Process.kill(:INT, pid) if process_alive?(pid)
+          begin
+            ::Process.kill(:INT, pid) if process_alive?(pid)
+          rescue
+            # Ignore errors so we can continue to kill other processes.
+          end
         end
       end
 
