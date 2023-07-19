@@ -74,8 +74,8 @@ describe Sidekiq::ProcessManager::Manager do
     it "should restart child processes if they use too much memory" do
       pids = manager.pids
       expect(pids.size).to eq 2
-      allow(manager).to receive(:kill).and_call_original
-      expect(manager).to receive(:kill).with(pids.first).and_call_original
+      allow(::Process).to receive(:kill).and_call_original
+      expect(::Process).to receive(:kill).with(:TERM, pids.first).and_call_original
       sleep(2)
       manager.wait
       # This check is flakey with Sidekiq 6.0 and below
