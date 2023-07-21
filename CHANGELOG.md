@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.2
+
+### Added
+- Added thread to monitor child processes to make sure they exit after a SIGTERM signal has been sent. If a process does not exit after the configured Sidekiq timeout time, then it will be killed with a SIGKILL signal.
+
+### Changed
+- A SIGINT sent to the manager process will sent SIGTERM to the child processes to give them a chance to shutdown gracefully.
+
 ## 1.1.1
 
 ### Added

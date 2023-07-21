@@ -72,7 +72,7 @@ module Sidekiq
               signal = @signal_pipe_read.gets.strip
               send_signal_to_children(signal.to_sym)
             rescue => e
-              log_error("Error handling signal #{signal}: #{e.message}")
+              log_warning("Error sending signal #{signal} to child processes: #{e.message}")
             end
           end
         end
@@ -81,6 +81,7 @@ module Sidekiq
         [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
           ::Signal.trap(signal) do
             if ::Process.pid == master_pid
+              signal = :TERM if signal == :INT
               @signal_pipe_write.puts(signal)
             end
           end
@@ -88,8 +89,12 @@ module Sidekiq
 
         # Ensure that child processes receive the term signal when the master process exits.
         at_exit do
-          if ::Process.pid == master_pid && @process_count > 0
-            send_signal_to_children(:TERM)
+          if ::Process.pid == master_pid
+            if @process_count > 0
+              send_signal_to_children(:TERM)
+            end
+            wait_for_children_to_exit
+            log_info("Process manager exiting")
           end
         end
 
@@ -104,9 +109,8 @@ module Sidekiq
 
         start_memory_monitor if @max_memory
 
-        log_info("Process manager started with pid #{::Process.pid}")
+        log_info("Process manager started")
         monitor_child_processes
-        log_info("Process manager #{::Process.pid} exiting")
       end
 
       # Helper to wait on the manager to wait on child processes to start up.
@@ -237,14 +241,24 @@ module Sidekiq
         log_info("Process manager trapped signal #{signal}")
         @process_count = 0 if signal == :INT || signal == :TERM
         pids.each do |pid|
-          begin
-            log_info("Sending signal #{signal} to sidekiq process #{pid}")
-            ::Process.kill(signal, pid)
-          rescue => e
-            log_warning("Error sending signal #{signal} to sidekiq process #{pid}: #{e.inspect}")
-          end
+          send_signal_to_pid(signal, pid)
         end
-        wait_for_children_to_exit(pids) if @process_count == 0
+      end
+
+      def send_signal_to_pid(signal, pid)
+        signal = signal.to_sym
+        begin
+          log_info("Sending signal #{signal} to sidekiq process #{pid}")
+          ::Process.kill(signal, pid)
+          if [:TERM, :INT].include?(signal)
+            Thread.new do
+              Thread.current.name = "pid-#{pid}-killer"
+              ensure_pid_dies(pid)
+            end
+          end
+        rescue Errno::ESRCH
+          # The process is already dead
+        end
       end
 
       def start_memory_monitor
@@ -259,12 +273,8 @@ module Sidekiq
               begin
                 memory = GetProcessMem.new(pid)
                 if memory.bytes > @max_memory
-                  log_warning("Kill bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
-                  begin
-                    ::Process.kill(:TERM, pid)
-                  rescue Errno::ESRCH
-                    # The process is already dead
-                  end
+                  log_warning("Killing bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
+                  send_signal_to_pid(:TERM, pid)
                   break
                 end
               rescue => e
@@ -281,22 +291,13 @@ module Sidekiq
         end
       end
 
-      def wait_for_children_to_exit(pids)
-        timeout = monotonic_time + (sidekiq_options[:timeout] || 25).to_f
+      def wait_for_children_to_exit
         pids.each do |pid|
-          while monotonic_time < timeout
-            break unless process_alive?(pid)
+          while process_alive?(pid)
             sleep(0.01)
           end
         end
-
-        pids.each do |pid|
-          begin
-            ::Process.kill(:INT, pid) if process_alive?(pid)
-          rescue
-            # Ignore errors so we can continue to kill other processes.
-          end
-        end
+        log_info("All sidekiq processes have exited")
       end
 
       def process_alive?(pid)
@@ -305,6 +306,24 @@ module Sidekiq
           true
         rescue Errno::ESRCH
           false
+        end
+      end
+
+      def ensure_pid_dies(pid)
+        # Wait for the process to die, or kill it after a timeout.
+        timeout = (sidekiq_options[:timeout] || 25).to_f
+        end_time = monotonic_time + timeout
+        while monotonic_time < end_time && process_alive?(pid)
+          sleep(0.1)
+        end
+
+        if process_alive?(pid)
+          begin
+            ::Process.kill(:KILL, pid)
+            log_warning("Sidekiq process #{pid} failed to exit after #{timeout} seconds; killed with SIGKILL")
+          rescue Errno::ESRCH
+            # The process is already dead
+          end
         end
       end
 

@@ -8,7 +8,7 @@ This gem provides a command line script for managing [sidekiq](https://github.co
 
 The sidekiq processes can all be managed by sending signals to the manager process. This process simply forwards the signals on to the child processes, allowing you to control the sidekiq processes as you normally would.
 
-If one of the sidekiq processes dies unexpectedly, the process manager automatically starts a new sidekiq process to replace it.
+If one of the sidekiq processes exits unexpectedly, the process manager automatically starts a new sidekiq process to replace it.
 
 ## Pre-Forking
 
@@ -44,7 +44,7 @@ For a Rails application, you would normally want to preboot the `config/boot.rb`
 
 ## Memory Bloat
 
-You can also specify a maximum memory footprint that you want to allow for each child process. You can use this feature to automatically guard against poorly designed workers that bloat the Ruby memory heap. Note that you can also use an external process monitor to kill processes with memory bloat; the process manager will restart any process regardless of how it dies.
+You can also specify a maximum memory footprint that you want to allow for each child process. You can use this feature to automatically guard against poorly designed workers that bloat the Ruby memory heap. Note that you can also use an external process monitor to kill processes with memory bloat; the process manager will restart any process regardless of how it exits.
 
 ## Usage
 
