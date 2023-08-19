@@ -2,6 +2,7 @@
 
 require "sidekiq"
 require "get_process_mem"
+require "linux_process_memory"
 
 module Sidekiq
   module ProcessManager
@@ -16,9 +17,12 @@ module Sidekiq
       # @param process_count [Integer] The number of sidekiq processes to start.
       # @param prefork [Boolean] If true, the process manager will load the application before forking.
       # @param preboot [String] If set, the process manager will require the specified file before forking the child processes.
+      # @param max_memory [Integer] If set, the process manager will kill any child processes that exceed the specified memory limit in bytes.
+      # @param memory_measurement [String] If set, the process manager will use the specified memory measurement to determine memory usage.
+      #   Valid values are "rss", "uss", and "pss". Defaults to "rss". This setting only works on Linux. Other platforms will use rss.
       # @param mode [Symbol] If set to :testing, the process manager will use a mock CLI.
       # @param silent [Boolean] If true, the process manager will not output any messages.
-      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, mode: nil, silent: false)
+      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, memory_measurement: nil, mode: nil, silent: false)
         require "sidekiq/cli"
 
         # Get the number of processes to fork
@@ -151,6 +155,27 @@ module Sidekiq
         @started
       end
 
+      # Get the amount of memory being used by a process.
+      #
+      # @param pid [Integer] The process id.
+      # @param measurement [String] The type of memory measurement to use (rss, uss, or pss).
+      # @return [Integer] The amount of memory used in bytes.
+      def get_process_memory(pid, measurement)
+        if LinuxProcessMemory.supported?
+          memory = LinuxProcessMemory.new(pid)
+          case measurement.to_s.downcase
+          when "uss"
+            memory.uss
+          when "pss"
+            memory.pss
+          else
+            memory.rss
+          end
+        else
+          GetProcessMem.new(pid).bytes
+        end
+      end
+
       private
 
       def log_info(message)
@@ -271,9 +296,10 @@ module Sidekiq
 
             pids.each do |pid|
               begin
-                memory = GetProcessMem.new(pid)
+                memory = get_process_memory(pid, @memory_measurement)
                 if memory.bytes > @max_memory
-                  log_warning("Killing bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
+                  megabytes = (memory.to_f / (1024**2)).round
+                  log_warning("Killing bloated sidekiq process #{pid}: #{megabytes}mb used")
                   send_signal_to_pid(:TERM, pid)
                   break
                 end

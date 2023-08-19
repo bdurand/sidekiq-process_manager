@@ -46,6 +46,14 @@ For a Rails application, you would normally want to preboot the `config/boot.rb`
 
 You can also specify a maximum memory footprint that you want to allow for each child process. You can use this feature to automatically guard against poorly designed workers that bloat the Ruby memory heap. Note that you can also use an external process monitor to kill processes with memory bloat; the process manager will restart any process regardless of how it exits.
 
+You can also specify how to measure process memory on a Linux system depending on how you want to treat shared memory.
+
+- rss - measure resident memory usage ([resident set size](https://en.wikipedia.org/wiki/Resident_set_size))
+- uss - measure only private (non-shared) memory ([unique set size](https://en.wikipedia.org/wiki/Unique_set_size))
+- pss - measure shared memory proportionally for all processes sharing it ([proportional set size](https://en.wikipedia.org/wiki/Proportional_set_size))
+
+The default is to measure resident memory. Non-Linux systems will always measure resident memory.
+
 ## Usage
 
 Install the gem in your sidekiq process and run it with `bundle exec sidekiq-process-manager` or, if you use [bundle binstubs](https://bundler.io/man/bundle-binstubs.1.html), `bin/sidekiq-process-manager`. Command line arguments are passed through to `sidekiq`. If you want to supply on of the `sidekiq-process_manager` specific options, those options should come first and the `sidekiq` options should appear after a `--` flag
@@ -97,16 +105,16 @@ or
 SIDEKIQ_PREBOOT=config/boot.rb SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
-You can set the maximum memory allowed per sidekiq process with the `--max-memory` argument or with the `SIDEKIQ_MAX_MEMORY` environment variable. You can suffix the value with "m" to specify megabytes or "g" to specify gigabytes.
+You can set the maximum memory allowed per sidekiq process with the `--max-memory` argument or with the `SIDEKIQ_MAX_MEMORY` environment variable. You can suffix the value with "m" to specify megabytes or "g" to specify gigabytes. You can specify the method for measuring process memory on Linux with `--memory-measurement` or the `SIDEKIQ_MEMORY_MEASUREMENT` environment variable.
 
 ```bash
-bundle exec sidekiq-process-manager --processes 4 --max-memory 2g
+bundle exec sidekiq-process-manager --processes 4 --max-memory 2g --memory-measurement rss
 ```
 
 or
 
 ```bash
-SIDEKIQ_MAX_MEMORY=2000m SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
+SIDEKIQ_MAX_MEMORY=2000m SIDEKIQ_MEMORY_MEASUREMENT=rss SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
 ## Alternatives
