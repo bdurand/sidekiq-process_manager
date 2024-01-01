@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "sidekiq", ">= 5.0"
   spec.add_dependency "get_process_mem"
+  spec.add_dependency "linux_process_memory"
 
   spec.add_development_dependency "bundler"
 end

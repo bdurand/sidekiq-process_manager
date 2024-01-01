@@ -27,6 +27,7 @@ options = {
   prefork: !ENV.fetch("SIDEKIQ_PREFORK", "").empty?,
   preboot: ENV["SIDEKIQ_PREBOOT"],
   max_memory: parse_max_memory(ENV["SIDEKIQ_MAX_MEMORY"]),
+  memory_measurement: ENV.fetch("SIDEKIQ_MEMORY_MEASUREMENT", "rss"),
   mode: nil,
 }
 
@@ -47,6 +48,10 @@ parser = OptionParser.new do |opts|
 
   opts.on('--max-memory MEMORY', "Max memory for each process (can also specify with SIDEKIQ_MAX_MEMORY); suffix with m or g to specify megabytes or gigabytes") do |max_memory|
     options[:max_memory] = parse_max_memory(max_memory)
+  end
+
+  opts.on('--memory-measurement rss|uss|pss', "How to measure process memory on a Linux system; this can be rss (resident), uss (unique/non-shared), or pss (proportional)") do |measurement|
+    options[:memory_measurement] = measurement
   end
 
   opts.on('--testing', "Enable test mode") do |testing|

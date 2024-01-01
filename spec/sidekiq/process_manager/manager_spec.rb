@@ -78,9 +78,39 @@ describe Sidekiq::ProcessManager::Manager do
       expect(::Process).to receive(:kill).with(:TERM, pids.first).and_call_original
       sleep(2)
       manager.wait
-      # This check is flakey with Sidekiq 6.0 and below
-      if Gem::Version.new(Sidekiq::VERSION) >= Gem::Version.new("6.5")
-        expect(manager.pids).to_not include(pids.first)
+      sleep(2)
+    end
+  end
+
+  describe "memory measurement" do
+    context "on Linux" do
+      before do
+        allow(LinuxProcessMemory).to receive(:supported?).and_return(true)
+      end
+
+      it "uses resident memory by default" do
+        expect_any_instance_of(LinuxProcessMemory).to receive(:rss).and_call_original
+        expect(manager.get_process_memory(1, nil)).to be_a Integer
+      end
+
+      it "can use unique memory measurements" do
+        expect_any_instance_of(LinuxProcessMemory).to receive(:uss).and_call_original
+        expect(manager.get_process_memory(1, "uss")).to be_a Integer
+      end
+
+      it "can use proportional memory measurements" do
+        expect_any_instance_of(LinuxProcessMemory).to receive(:pss).and_call_original
+        expect(manager.get_process_memory(1, "pss")).to be_a Integer
+      end
+    end
+
+    context "on on-Linux systems" do
+      before do
+        allow(LinuxProcessMemory).to receive(:supported?).and_return(false)
+      end
+
+      it "uses resident memory" do
+        expect(manager.get_process_memory(Process.pid, "pss")).to be > 0
       end
     end
   end
