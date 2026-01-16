@@ -25,7 +25,7 @@ module Sidekiq
         @process_count = process_count
         raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
 
-        @prefork = (prefork && process_count > 1)
+        @prefork = prefork && process_count > 1
         @preboot = preboot if process_count > 1 && !prefork
         @max_memory = ((max_memory.to_i > 0) ? max_memory.to_i : nil)
 
@@ -101,7 +101,7 @@ module Sidekiq
         GC.start
         GC.compact if GC.respond_to?(:compact)
         # I'm not sure why, but running GC operations blocks until we try to write some I/O.
-        File.write("/dev/null", "0")
+        File.write(File::NULL, "0")
 
         @process_count.times do
           start_child_process!
@@ -270,16 +270,14 @@ module Sidekiq
             sleep(@memory_check_interval)
 
             pids.each do |pid|
-              begin
-                memory = GetProcessMem.new(pid)
-                if memory.bytes > @max_memory
-                  log_warning("Killing bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
-                  send_signal_to_pid(:TERM, pid)
-                  break
-                end
-              rescue => e
-                log_warning("Error monitoring memory for sidekiq process #{pid}: #{e.inspect}")
+              memory = GetProcessMem.new(pid)
+              if memory.bytes > @max_memory
+                log_warning("Killing bloated sidekiq process #{pid}: #{memory.mb.round}mb used")
+                send_signal_to_pid(:TERM, pid)
+                break
               end
+            rescue => e
+              log_warning("Error monitoring memory for sidekiq process #{pid}: #{e.inspect}")
             end
           end
         end
@@ -301,12 +299,10 @@ module Sidekiq
       end
 
       def process_alive?(pid)
-        begin
-          ::Process.getpgid(pid)
-          true
-        rescue Errno::ESRCH
-          false
-        end
+        ::Process.getpgid(pid)
+        true
+      rescue Errno::ESRCH
+        false
       end
 
       def ensure_pid_dies(pid)

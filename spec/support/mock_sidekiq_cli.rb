@@ -63,10 +63,8 @@ class MockSidekiqCLI
   end
 
   def read_process_output!
-    begin
-      loop { @process_output << @pipe_reader.read_nonblock(4096) }
-    rescue IO::EAGAINWaitReadable
-      nil
-    end
+    loop { @process_output << @pipe_reader.read_nonblock(4096) }
+  rescue IO::EAGAINWaitReadable
+    nil
   end
 end
