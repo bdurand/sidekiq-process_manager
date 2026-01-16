@@ -7,8 +7,15 @@ Gem::Specification.new do |spec|
   spec.email = ["bbdurand@gmail.com"]
 
   spec.summary = "Process manager for forking and monitoring multiple sidekiq processes."
+
   spec.homepage = "https://github.com/bdurand/sidekiq-process_manager"
   spec.license = "MIT"
+
+  spec.metadata = {
+    "homepage_uri" => spec.homepage,
+    "source_code_uri" => spec.homepage,
+    "changelog_uri" => "#{spec.homepage}/blob/main/CHANGELOG.md"
+  }
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.

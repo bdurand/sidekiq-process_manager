@@ -1,7 +1,6 @@
 # Sidekiq::ProcessManager
 
 [![Continuous Integration](https://github.com/bdurand/sidekiq-process_manager/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/bdurand/sidekiq-process_manager/actions/workflows/continuous_integration.yml)
-[![Regression Test](https://github.com/bdurand/sidekiq-process_manager/actions/workflows/regression_test.yml/badge.svg)](https://github.com/bdurand/sidekiq-process_manager/actions/workflows/regression_test.yml)
 [![Ruby Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://github.com/testdouble/standard)
 [![Gem Version](https://badge.fury.io/rb/sidekiq-process_manager.svg)](https://badge.fury.io/rb/sidekiq-process_manager)
 

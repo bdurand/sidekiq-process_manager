@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Sidekiq::ProcessManager::Manager do
+RSpec.describe Sidekiq::ProcessManager::Manager do
   let!(:manager) do
     manager = Sidekiq::ProcessManager::Manager.new(process_count: process_count, prefork: prefork, preboot: preboot, max_memory: max_memory, mode: :testing, silent: true)
     Thread.new { manager.start }

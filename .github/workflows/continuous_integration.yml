@@ -10,6 +10,7 @@ on:
   pull_request:
     branches-ignore:
       - actions-*
+  workflow_dispatch:
 
 env:
   BUNDLE_CLEAN: "true"
@@ -26,6 +27,11 @@ jobs:
         include:
           - ruby: "ruby"
             standardrb: true
+            yard: true
+          - ruby: "4.0"
+            appraisal: "sidekiq_8.x"
+          - ruby: "3.4"
+            appraisal: "sidekiq_8.0"
           - ruby: "3.2"
             appraisal: "sidekiq_7.x"
           - ruby: "3.1"
@@ -65,4 +71,7 @@ jobs:
       run: bundle exec rake
     - name: standardrb
       if:   matrix.standardrb == true
-      run:  bundle exec rake standard
+      run:  bundle exec standardrb
+    - name: yard
+      if: matrix.yard == true
+      run: bundle exec yard doc --fail-on-warning
