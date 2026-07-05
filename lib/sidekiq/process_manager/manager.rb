@@ -2,6 +2,7 @@
 
 require "sidekiq"
 require "get_process_mem"
+require "timeout"
 
 module Sidekiq
   module ProcessManager
@@ -23,7 +24,7 @@ module Sidekiq
 
         # Get the number of processes to fork
         @process_count = process_count
-        raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
+        raise ArgumentError.new("Process count must be greater than 0") if @process_count < 1
 
         @prefork = prefork && process_count > 1
         @preboot = preboot if process_count > 1 && !prefork
@@ -69,7 +70,10 @@ module Sidekiq
 
           while @signal_pipe_read.wait_readable
             begin
-              signal = @signal_pipe_read.gets.strip
+              signal = @signal_pipe_read.gets
+              break if signal.nil?
+
+              signal = signal.strip
               send_signal_to_children(signal.to_sym)
             rescue => e
               log_warning("Error sending signal #{signal} to child processes: #{e.message}")
@@ -120,7 +124,7 @@ module Sidekiq
       def wait(timeout = 5)
         timeout_time = monotonic_time + timeout
         while monotonic_time <= timeout_time
-          return if @pids.size == @process_count
+          return if pids.size == @process_count
           sleep(0.01)
         end
 
@@ -217,7 +221,7 @@ module Sidekiq
       end
 
       def set_program_name!
-        $PROGRAM_NAME = "sidekiq process manager #{sidekiq_options[:tag]} [#{@pids.size} processes]"
+        $PROGRAM_NAME = "sidekiq process manager #{sidekiq_options[:tag]} [#{pids.size} processes]"
       end
 
       def start_child_process!
@@ -232,15 +236,25 @@ module Sidekiq
           Sidekiq::ProcessManager.run_after_fork_hooks
           @cli.run
         end
-        @mutex.synchronize { @pids << pid }
+        shutting_down = false
+        @mutex.synchronize do
+          @pids << pid
+          shutting_down = @process_count < 1
+        end
         log_info("Forked sidekiq process with pid #{pid}")
+        # A shutdown signal may have been forwarded to the other processes while
+        # this one was being forked; it needs to get the signal as well.
+        send_signal_to_pid(:TERM, pid) if shutting_down
         set_program_name!
       end
 
       def send_signal_to_children(signal)
         log_info("Process manager trapped signal #{signal}")
-        @process_count = 0 if signal == :INT || signal == :TERM
-        pids.each do |pid|
+        child_pids = @mutex.synchronize do
+          @process_count = 0 if signal == :INT || signal == :TERM
+          @pids.dup
+        end
+        child_pids.each do |pid|
           send_signal_to_pid(signal, pid)
         end
       end
@@ -290,33 +304,43 @@ module Sidekiq
       end
 
       def wait_for_children_to_exit
+        # Allow time for the SIGKILL failsafe in ensure_pid_dies to fire before giving up.
+        deadline = monotonic_time + sidekiq_shutdown_timeout + 5
         pids.each do |pid|
-          while process_alive?(pid)
-            sleep(0.01)
+          begin
+            # The monitoring loop may no longer be running, so reap the child
+            # process here rather than just polling for it to disappear.
+            until ::Process.waitpid(pid, ::Process::WNOHANG)
+              break if monotonic_time > deadline
+              sleep(0.01)
+            end
+          rescue Errno::ECHILD, Errno::ESRCH
+            # The process has already been reaped.
           end
+          @mutex.synchronize { @pids.delete(pid) }
         end
         log_info("All sidekiq processes have exited")
       end
 
-      def process_alive?(pid)
-        ::Process.getpgid(pid)
-        true
-      rescue Errno::ESRCH
-        false
+      def sidekiq_shutdown_timeout
+        (sidekiq_options[:timeout] || 25).to_f
       end
 
       def ensure_pid_dies(pid)
-        # Wait for the process to die, or kill it after a timeout.
-        timeout = (sidekiq_options[:timeout] || 25).to_f
-        end_time = monotonic_time + timeout
-        while monotonic_time < end_time && process_alive?(pid)
+        # Wait for the process to die, or kill it after a timeout. The pid is
+        # removed from the list when the process is reaped, so use the list as
+        # the source of truth for liveness. Checking if the pid is running with
+        # a system call is not reliable since the pid could be reused by the
+        # operating system for a different process.
+        end_time = monotonic_time + sidekiq_shutdown_timeout
+        while monotonic_time < end_time && pids.include?(pid)
           sleep(0.1)
         end
 
-        if process_alive?(pid)
+        if pids.include?(pid)
           begin
             ::Process.kill(:KILL, pid)
-            log_warning("Sidekiq process #{pid} failed to exit after #{timeout} seconds; killed with SIGKILL")
+            log_warning("Sidekiq process #{pid} failed to exit after #{sidekiq_shutdown_timeout} seconds; killed with SIGKILL")
           rescue Errno::ESRCH
             # The process is already dead
           end
@@ -326,19 +350,30 @@ module Sidekiq
       # Listen for child processes dying and restart if necessary.
       def monitor_child_processes
         loop do
-          pid = ::Process.wait
-          @mutex.synchronize { @pids.delete(pid) }
+          begin
+            pid = ::Process.wait
+          rescue Errno::ECHILD
+            # All child processes are already gone.
+            @mutex.synchronize { @pids.clear }
+            break
+          end
+
+          # Process.wait reaps any child process, including ones spawned by
+          # libraries or application code (i.e. get_process_mem shelling out
+          # to ps). Only act on processes forked by the manager.
+          removed = @mutex.synchronize { @pids.delete(pid) }
+          next unless removed
 
           log_info("Sidekiq process #{pid} exited")
 
           # If there are not enough processes running, start a replacement one.
-          if @process_count > @pids.size
+          if @process_count > pids.size
             start_child_process!
           end
 
           set_program_name!
 
-          if @pids.empty?
+          if pids.empty?
             break
           end
         end

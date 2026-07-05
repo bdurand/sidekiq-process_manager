@@ -66,6 +66,25 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
     it "should not be able to start the process manager twice" do
       expect { manager.start }.to raise_error("Process manager already started")
     end
+
+    it "should require a process count greater than 0" do
+      expect {
+        Sidekiq::ProcessManager::Manager.new(process_count: 0, mode: :testing, silent: true)
+      }.to raise_error(ArgumentError, "Process count must be greater than 0")
+    end
+
+    it "should shut down all processes when a child dies at the same time as a TERM signal" do
+      kill_pid = manager.pids.first
+      ::Process.kill(:TERM, kill_pid)
+      ::Process.kill(:TERM, ::Process.pid)
+
+      deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + 5
+      while manager.pids.any? && ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) < deadline
+        sleep(0.05)
+      end
+
+      expect(manager.pids).to be_empty
+    end
   end
 
   describe "with max memory set for child processes" do

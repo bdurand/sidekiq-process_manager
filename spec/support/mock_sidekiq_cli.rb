@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "stringio"
+
 class MockSidekiqCLI
   attr_reader :application
   attr_writer :silent

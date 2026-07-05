@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.3
+
+### Fixed
+- Fixed race condition where a child process forked to replace a dead process while a TERM or INT signal was being handled would never receive the shutdown signal, leaving the process manager hung waiting on it.
+- Child processes are now reaped while waiting for them to exit at shutdown, with a timeout, so the process manager can no longer hang forever waiting on zombie processes if it exits abnormally.
+- Child processes spawned by libraries or application code (e.g. `ps` invoked by the get_process_mem gem) are no longer mistaken for sidekiq processes by the process monitor.
+- The SIGKILL failsafe now uses the manager's list of running processes to determine liveness instead of a system call, removing the possibility of signaling an unrelated process if the operating system reuses a process id.
+- The signal handling thread exits cleanly instead of busy-looping if the signal pipe is closed.
+- Fixed the validation error message when the process count is less than one.
+- The `sidekiq-process-manager` command line now accepts a max memory value in plain bytes and aborts with an error message on invalid values instead of silently ignoring them.
+
 ## 1.1.2
 
 ### Added
