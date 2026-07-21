@@ -34,14 +34,15 @@ module Sidekiq
           require_relative "../../../spec/support/mocks"
           @cli = MockSidekiqCLI.new(silent)
           @memory_check_interval = 1
+          @exit_grace_period = 0.5
         else
           @cli = Sidekiq::CLI.instance
           @memory_check_interval = 60
+          @exit_grace_period = 5
         end
 
         @silent = silent
         @pids = []
-        @terminated_pids = []
         @started = false
         @mutex = Mutex.new
       end
@@ -304,22 +305,67 @@ module Sidekiq
       end
 
       def wait_for_children_to_exit
-        # Allow time for the SIGKILL failsafe in ensure_pid_dies to fire before giving up.
-        deadline = monotonic_time + sidekiq_shutdown_timeout + 5
-        pids.each do |pid|
-          begin
-            # The monitoring loop may no longer be running, so reap the child
-            # process here rather than just polling for it to disappear.
-            until ::Process.waitpid(pid, ::Process::WNOHANG)
-              break if monotonic_time > deadline
-              sleep(0.01)
-            end
-          rescue Errno::ECHILD, Errno::ESRCH
-            # The process has already been reaped.
+        # Allow the SIGKILL failsafe in ensure_pid_dies time to fire before giving up on a process.
+        remaining = reap_child_processes(pids, monotonic_time + sidekiq_shutdown_timeout + @exit_grace_period)
+
+        unless remaining.empty?
+          # Don't leave orphaned processes behind. These pids were never reaped,
+          # so the operating system cannot have reused them for another process
+          # and it is safe to signal them.
+          remaining.each do |pid|
+            ::Process.kill(:KILL, pid)
+            log_warning("Sidekiq process #{pid} failed to exit; killed with SIGKILL")
+          rescue Errno::ESRCH
+            # The process is already dead
           end
-          @mutex.synchronize { @pids.delete(pid) }
+
+          # SIGKILL cannot be caught or ignored, so the processes will exit, but
+          # not necessarily by the time the signal is sent. Wait for them so they
+          # are not left behind as zombies.
+          remaining = reap_child_processes(remaining, monotonic_time + @exit_grace_period)
         end
-        log_info("All sidekiq processes have exited")
+
+        if remaining.empty?
+          log_info("All sidekiq processes have exited")
+        else
+          log_warning("Gave up waiting on sidekiq processes: #{remaining.join(", ")}")
+        end
+      end
+
+      # Reap child processes as they exit until they have all been reaped or the
+      # deadline passes.
+      #
+      # @return [Array<Integer>] The pids that were not reaped.
+      def reap_child_processes(child_pids, deadline)
+        remaining = child_pids.dup
+        until remaining.empty?
+          # Poll all of the processes on each pass so that one slow process
+          # cannot consume the entire timeout waiting for the others.
+          remaining.delete_if { |pid| reap_child_process(pid) }
+          break if remaining.empty? || monotonic_time >= deadline
+          sleep(0.01)
+        end
+        remaining
+      end
+
+      # Reap a child process if it has exited. The pid is only removed from the
+      # list of running processes when it is actually reaped so that the SIGKILL
+      # failsafe in ensure_pid_dies still sees it as running until then.
+      #
+      # @return [Boolean] true if the process has been reaped or is no longer a child process.
+      def reap_child_process(pid)
+        reaped = begin
+          # The monitoring loop may no longer be running, so reap the child
+          # process here rather than just polling for it to disappear.
+          ::Process.waitpid(pid, ::Process::WNOHANG)
+        rescue Errno::ECHILD, Errno::ESRCH
+          # The process has already been reaped.
+          pid
+        end
+        return false unless reaped
+
+        @mutex.synchronize { @pids.delete(pid) }
+        true
       end
 
       def sidekiq_shutdown_timeout
@@ -327,11 +373,11 @@ module Sidekiq
       end
 
       def ensure_pid_dies(pid)
-        # Wait for the process to die, or kill it after a timeout. The pid is
-        # removed from the list when the process is reaped, so use the list as
-        # the source of truth for liveness. Checking if the pid is running with
-        # a system call is not reliable since the pid could be reused by the
-        # operating system for a different process.
+        # Wait for the process to die, or kill it after a timeout. A pid is
+        # removed from the list only once it has been reaped, so the list is the
+        # source of truth for liveness; a pid still in it cannot have been reused
+        # by the operating system for a different process. Checking with a system
+        # call is not reliable since it cannot distinguish a recycled pid.
         end_time = monotonic_time + sidekiq_shutdown_timeout
         while monotonic_time < end_time && pids.include?(pid)
           sleep(0.1)

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed race condition where a child process forked to replace a dead process while a TERM or INT signal was being handled would never receive the shutdown signal, leaving the process manager hung waiting on it.
-- Child processes are now reaped while waiting for them to exit at shutdown, with a timeout, so the process manager can no longer hang forever waiting on zombie processes if it exits abnormally.
+- Child processes are now reaped while waiting for them to exit at shutdown, with a timeout, so the process manager can no longer hang forever waiting on zombie processes if it exits abnormally. All processes are polled on each pass so that one slow process cannot consume the entire timeout, and any that are still running when the timeout expires are killed with SIGKILL and reaped rather than being orphaned.
 - Child processes spawned by libraries or application code (e.g. `ps` invoked by the get_process_mem gem) are no longer mistaken for sidekiq processes by the process monitor.
 - The SIGKILL failsafe now uses the manager's list of running processes to determine liveness instead of a system call, removing the possibility of signaling an unrelated process if the operating system reuses a process id.
 - The signal handling thread exits cleanly instead of busy-looping if the signal pipe is closed.
