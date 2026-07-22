@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.3
 
 ### Fixed
+- Child processes now reset the signal handlers inherited from the process manager to their default behavior when they are forked. The inherited handlers do nothing outside of the master process, so any signal sent to a child process before sidekiq installed its own handlers was silently discarded and the process would only be stopped by the SIGKILL failsafe.
 - Fixed race condition where a child process forked to replace a dead process while a TERM or INT signal was being handled would never receive the shutdown signal, leaving the process manager hung waiting on it.
 - Child processes are now reaped while waiting for them to exit at shutdown, with a timeout, so the process manager can no longer hang forever waiting on zombie processes if it exits abnormally. All processes are polled on each pass so that one slow process cannot consume the entire timeout, and any that are still running when the timeout expires are killed with SIGKILL and reaped rather than being orphaned.
 - Child processes spawned by libraries or application code (e.g. `ps` invoked by the get_process_mem gem) are no longer mistaken for sidekiq processes by the process monitor.

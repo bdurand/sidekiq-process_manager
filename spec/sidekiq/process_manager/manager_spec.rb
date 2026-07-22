@@ -20,6 +20,19 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
     manager.wait(5)
   end
 
+  # Poll until the block returns true. Child processes run independently of the
+  # test, so conditions that depend on their progress cannot be assumed to hold
+  # the instant the manager reports a change.
+  def wait_until(timeout = 5)
+    end_time = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout
+    until yield
+      if ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) > end_time
+        raise Timeout::Error.new("condition not met in #{timeout} seconds")
+      end
+      sleep(0.01)
+    end
+  end
+
   describe "managing processes" do
     it "should start a specified number of processes" do
       expect(manager.pids.size).to eq 2
@@ -56,8 +69,13 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
       kill_pid = pids.first
       keep_pid = pids.last
       ::Process.kill(:TERM, kill_pid)
-      sleep(2)
+
+      # The process count is back to normal as soon as the replacement is forked,
+      # which can happen before the dead pid has been removed from the list, so
+      # wait on the pid itself rather than on the count.
+      wait_until { !manager.pids.include?(kill_pid) }
       manager.wait
+
       expect(manager.pids.size).to eq 2
       expect(manager.pids).to_not include(kill_pid)
       expect(manager.pids).to include(keep_pid)
@@ -129,7 +147,7 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
 
     it "should call after fork hooks on the child processes" do
       manager.pids.each do |pid|
-        expect(manager.cli.output_for(pid)).to eq ["after_fork_1", "after_fork_2"]
+        expect(manager.cli.wait_for_output(pid, 2)).to eq ["after_fork_1", "after_fork_2"]
       end
     end
   end

@@ -49,10 +49,14 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
     ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
   end
 
+  # Reap a process and return its exit status. waitpid2 returns the status
+  # directly so this does not depend on the $CHILD_STATUS global, which is only
+  # defined when the English library happens to be loaded.
   def wait_for_reap(pid, timeout = 5)
     end_time = monotonic_time + timeout
     while monotonic_time < end_time
-      return $CHILD_STATUS if ::Process.waitpid(pid, ::Process::WNOHANG)
+      _, status = ::Process.waitpid2(pid, ::Process::WNOHANG)
+      return status if status
       sleep(0.01)
     end
     nil

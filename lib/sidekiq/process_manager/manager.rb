@@ -10,6 +10,9 @@ module Sidekiq
     # that the specified number of sidekiq processes are running. It will also forward
     # signals sent to the main process to the child processes.
     class Manager
+      # Signals that are trapped by the process manager and forwarded to the child processes.
+      SIGNALS = [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].freeze
+
       attr_reader :cli
 
       # Create a new process manager.
@@ -83,7 +86,7 @@ module Sidekiq
         end
 
         # Trap signals that will be forwarded to child processes
-        [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
+        SIGNALS.each do |signal|
           ::Signal.trap(signal) do
             if ::Process.pid == master_pid
               signal = :TERM if signal == :INT
@@ -227,6 +230,15 @@ module Sidekiq
 
       def start_child_process!
         pid = fork do
+          # Child processes inherit the signal handlers installed by the process
+          # manager. Those handlers only do anything in the master process, so
+          # leaving them in place would silently discard any signal sent to the
+          # child before sidekiq installs its own handlers. Restore the default
+          # behavior until then so signals are never swallowed.
+          SIGNALS.each do |signal|
+            ::Signal.trap(signal, "DEFAULT")
+          end
+
           # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
           $0 = File.join(File.dirname($0), "sidekiq")
           @process_count = 0

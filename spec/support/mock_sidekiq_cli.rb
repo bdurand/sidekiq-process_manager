@@ -20,6 +20,19 @@ class MockSidekiqCLI
     @process_output.string.split("\n").select { |line| line.start_with?("pid(#{pid}):") }.collect { |line| line.sub(marker, "").strip }
   end
 
+  # Wait for a child process to write the expected number of lines. Forking a
+  # child process says nothing about how far it has gotten, so the output is not
+  # necessarily there the moment the pid shows up in the manager's process list.
+  def wait_for_output(pid, count, timeout = 5)
+    end_time = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout
+    output = output_for(pid)
+    while output.size < count && ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) < end_time
+      sleep(0.01)
+      output = output_for(pid)
+    end
+    output
+  end
+
   def run
     unless Sidekiq::CLI.instance.public_methods.include?(:run)
       raise "Sidekiq::CLI #{Sidekiq::VERSION} does not defined a run method"
