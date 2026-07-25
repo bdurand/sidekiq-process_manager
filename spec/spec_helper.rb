@@ -7,7 +7,7 @@ require "bundler/setup" if File.exist?(ENV["BUNDLE_GEMFILE"])
 begin
   require "simplecov"
   SimpleCov.start do
-    skip ["/spec/"]
+    add_filter ["/spec/"]
   end
 rescue LoadError
 end
