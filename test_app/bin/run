@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+#
+# Bring up everything the test app needs: the valkey server, the sidekiq
+# processes, and the dashboard. Ctrl-C, or a TERM sent to this process, shuts
+# all three back down.
+#
+# Any arguments are passed through to bin/sidekiq:
+#
+#   bin/run --prefork
+#
+# Run the pieces individually with bin/run-valkey, bin/sidekiq, and bin/ui if
+# you want each one in its own terminal.
+#
+# Not using `set -e`: a child exiting is handled below rather than aborting
+# the script and leaving the others running.
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Same port bin/run-valkey publishes and the app connects to.
+REDIS_PORT="${REDIS_PORT:-$(sed -n 's/^[[:space:]]*REDIS_PORT[[:space:]]*=[[:space:]]*\(.*\)/\1/p' .env | tail -n 1 | tr -d "\"'")}"
+if [ -z "${REDIS_PORT}" ]; then
+  echo "[run] REDIS_PORT is not set and was not found in .env" >&2
+  exit 2
+fi
+
+pids=()
+names=()
+shutting_down=""
+
+log() {
+  echo "[run] $*"
+}
+
+start_process() {
+  local name="$1"
+  shift
+
+  "$@" &
+  pids+=("$!")
+  names+=("${name}")
+  log "started ${name} (pid $!)"
+}
+
+# Signal every child, give them time to exit on their own, then kill whatever
+# is left so nothing is orphaned.
+shutdown() {
+  [ -n "${shutting_down}" ] && return
+  shutting_down="yes"
+  trap '' INT TERM
+  [ "${#pids[@]}" -eq 0 ] && return
+
+  echo
+  log "shutting down"
+
+  local index
+  local pid
+  for index in "${!pids[@]}"; do
+    kill -TERM "${pids[${index}]}" 2>/dev/null
+  done
+
+  local deadline=$((SECONDS + 30))
+  while [ "${SECONDS}" -lt "${deadline}" ]; do
+    local running=""
+    for pid in "${pids[@]}"; do
+      kill -0 "${pid}" 2>/dev/null && running="yes"
+    done
+    [ -z "${running}" ] && break
+    sleep 0.5
+  done
+
+  for index in "${!pids[@]}"; do
+    if kill -0 "${pids[${index}]}" 2>/dev/null; then
+      log "${names[${index}]} did not exit; killing it"
+      kill -KILL "${pids[${index}]}" 2>/dev/null
+    fi
+  done
+
+  wait 2>/dev/null
+  log "all processes stopped"
+}
+
+# Exit from the handler itself so the monitor loop below does not get a turn to
+# report the processes this just stopped as having died on their own.
+trap 'shutdown; exit 0' INT TERM
+
+# The sidekiq processes are noisy about a redis they cannot reach, so wait for
+# the server to accept connections before starting anything that uses it.
+wait_for_redis() {
+  local deadline=$((SECONDS + 30))
+  while [ "${SECONDS}" -lt "${deadline}" ]; do
+    if (exec 3<>"/dev/tcp/127.0.0.1/${REDIS_PORT}") 2>/dev/null; then
+      return 0
+    fi
+    kill -0 "${pids[0]}" 2>/dev/null || return 1
+    sleep 0.5
+  done
+  return 1
+}
+
+start_process valkey ./bin/run-valkey
+
+log "waiting for redis on port ${REDIS_PORT}"
+if ! wait_for_redis; then
+  log "redis never came up on port ${REDIS_PORT}" >&2
+  shutdown
+  exit 1
+fi
+
+start_process sidekiq ./bin/sidekiq "$@"
+start_process dashboard ./bin/ui
+
+# Watch the children. If any one of them exits, take the rest down too so a
+# half running stack is never mistaken for a working one.
+while true; do
+  for index in "${!pids[@]}"; do
+    if ! kill -0 "${pids[${index}]}" 2>/dev/null; then
+      log "${names[${index}]} exited"
+      shutdown
+      exit 1
+    fi
+  done
+  sleep 1
+done

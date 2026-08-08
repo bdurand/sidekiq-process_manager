@@ -109,6 +109,18 @@ or
 SIDEKIQ_MAX_MEMORY=2000m SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
+Memory is checked once a minute by default. You can change how often with the `--memory-check-interval` argument or with the `SIDEKIQ_MEMORY_CHECK_INTERVAL` environment variable. The value is in seconds. Note that only one process is restarted per check, so the interval also controls how quickly multiple bloated processes are recycled.
+
+```bash
+bundle exec sidekiq-process-manager --processes 4 --max-memory 2g --memory-check-interval 10
+```
+
+or
+
+```bash
+SIDEKIQ_MEMORY_CHECK_INTERVAL=10 SIDEKIQ_MAX_MEMORY=2g SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
+```
+
 ## Alternatives
 
 Any process manager can be an alternative (service, update, systemd, monit, god, etc.).
@@ -138,6 +150,20 @@ Or install it yourself as:
 ```bash
 $ gem install sidekiq-process_manager
 ```
+
+## Test Application
+
+There is a test application in the `test_app` directory that can be used to test the process manager. You can run it with:
+
+```bash
+$ cd test_app
+$ bundle install
+$ bin/run
+```
+
+This will bring up a valkey docker instance, sidekiq cluster, and rack application that shows the status of the sidekiq processes.
+
+Then visit [http://localhost:9292](http://localhost:9292) to see the status of the sidekiq processes.
 
 ## Contributing
 

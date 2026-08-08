@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 1.1.3
 
+### Added
+- The interval between memory checks can now be set with the `--memory-check-interval` command line argument or the `SIDEKIQ_MEMORY_CHECK_INTERVAL` environment variable. It still defaults to 60 seconds.
+
 ### Fixed
 - Child processes now reset the signal handlers inherited from the process manager to their default behavior when they are forked. The inherited handlers do nothing outside of the master process, so any signal sent to a child process before sidekiq installed its own handlers was silently discarded and the process would only be stopped by the SIGKILL failsafe.
 - Fixed race condition where a child process forked to replace a dead process while a TERM or INT signal was being handled would never receive the shutdown signal, leaving the process manager hung waiting on it.

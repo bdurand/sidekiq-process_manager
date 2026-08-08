@@ -1,0 +1,23 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Start the dashboard that shows the state of the sidekiq processes.
+#
+#   bin/ui           # http://localhost:9292
+#   PORT=4000 bin/ui
+#
+# Settings, including the memory limit the dashboard draws each process against,
+# come from .env.
+
+Dir.chdir(File.expand_path("..", __dir__))
+ENV["BUNDLE_GEMFILE"] ||= File.expand_path("Gemfile")
+
+require "bundler/setup"
+require "dotenv/load"
+require "puma/cli"
+
+port = ENV.fetch("PORT", "9292")
+$stdout.puts("Sidekiq process dashboard: http://localhost:#{port}")
+
+# Bound to localhost since the dashboard controls can enqueue jobs.
+Puma::CLI.new(["config.ru", "--bind", "tcp://127.0.0.1:#{port}"]).run

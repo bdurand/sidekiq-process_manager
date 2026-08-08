@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# The gem being exercised by this test application.
+gem "sidekiq-process_manager", path: ".."
+
+gem "sidekiq"
+
+# Settings for the test app live in .env.
+gem "dotenv"
+
+# Used by the dashboard UI.
+gem "puma"
+gem "rack"

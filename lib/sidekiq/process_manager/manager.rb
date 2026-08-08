@@ -13,6 +13,9 @@ module Sidekiq
       # Signals that are trapped by the process manager and forwarded to the child processes.
       SIGNALS = [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].freeze
 
+      # Number of seconds between memory checks when a max memory is set.
+      DEFAULT_MEMORY_CHECK_INTERVAL = 60
+
       attr_reader :cli
 
       # Create a new process manager.
@@ -20,9 +23,11 @@ module Sidekiq
       # @param process_count [Integer] The number of sidekiq processes to start.
       # @param prefork [Boolean] If true, the process manager will load the application before forking.
       # @param preboot [String] If set, the process manager will require the specified file before forking the child processes.
+      # @param memory_check_interval [Numeric] The number of seconds between memory checks
+      #   when a max memory is set.
       # @param mode [Symbol] If set to :testing, the process manager will use a mock CLI.
       # @param silent [Boolean] If true, the process manager will not output any messages.
-      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, mode: nil, silent: false)
+      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, memory_check_interval: nil, mode: nil, silent: false)
         require "sidekiq/cli"
 
         # Get the number of processes to fork
@@ -33,14 +38,18 @@ module Sidekiq
         @preboot = preboot if process_count > 1 && !prefork
         @max_memory = ((max_memory.to_i > 0) ? max_memory.to_i : nil)
 
+        if !memory_check_interval.nil? && memory_check_interval.to_f <= 0
+          raise ArgumentError.new("Memory check interval must be greater than 0")
+        end
+
         if mode == :testing
           require_relative "../../../spec/support/mocks"
           @cli = MockSidekiqCLI.new(silent)
-          @memory_check_interval = 1
+          @memory_check_interval = (memory_check_interval || 1).to_f
           @exit_grace_period = 0.5
         else
           @cli = Sidekiq::CLI.instance
-          @memory_check_interval = 60
+          @memory_check_interval = (memory_check_interval || DEFAULT_MEMORY_CHECK_INTERVAL).to_f
           @exit_grace_period = 5
         end
 
@@ -289,7 +298,7 @@ module Sidekiq
       end
 
       def start_memory_monitor
-        log_info("Starting memory monitor with max memory #{(@max_memory / (1024**2)).round}mb")
+        log_info("Starting memory monitor with max memory #{(@max_memory / (1024**2)).round}mb checked every #{@memory_check_interval} seconds")
 
         @memory_monitor = Thread.new do
           Thread.current.name = "memory-monitor"

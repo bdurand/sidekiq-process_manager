@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# Start the sidekiq process manager with three sidekiq processes.
+#
+# Settings come from .env. Any arguments are passed through to
+# sidekiq-process-manager, so you can override them:
+#
+#   bin/sidekiq --prefork
+#   bin/sidekiq --max-memory 150m
+#   SIDEKIQ_PROCESSES=5 bin/sidekiq
+#
+set -e
+
+cd "$(dirname "$0")/.."
+
+exec bundle exec dotenv sidekiq-process-manager \
+  "$@" \
+  -- -r ./app/application.rb -C config/sidekiq.yml

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run a valkey (redis-compatible) container using either the `container` tool
+# (podman/docker replacement) or `docker` if available.
+#
+# Behavior:
+# - Prefer `container` if present, otherwise `docker`.
+# - Publish container port 6379 on REDIS_PORT, read from .env so that the
+#   server and the application always agree on the port. Anything already set
+#   in the environment wins, the same way dotenv works.
+# - Pass VALKEY_EXTRA_FLAGS as an environment variable to the container.
+# - Print the exact command before running for transparency.
+
+cd "$(dirname "$0")/.."
+
+if [ -z "${REDIS_PORT:-}" ] && [ -f .env ]; then
+  REDIS_PORT="$(sed -n 's/^[[:space:]]*REDIS_PORT[[:space:]]*=[[:space:]]*\(.*\)/\1/p' .env | tail -n 1 | tr -d "\"'")"
+fi
+
+if [ -z "${REDIS_PORT:-}" ]; then
+  echo "Error: REDIS_PORT is not set and was not found in .env" >&2
+  exit 2
+fi
+
+: "${VALKEY_IMAGE:=docker.io/valkey/valkey:9.0.1-alpine}"
+: "${VALKEY_EXTRA_FLAGS:=--loglevel warning --maxmemory 30m --maxmemory-policy allkeys-lru --databases 10}"
+
+# Only ask for a terminal when there is one to give. bin/run starts this script
+# in the background, where stdin is /dev/null and `-it` would fail outright.
+tty_flags=""
+if [ -t 0 ] && [ -t 1 ]; then
+  tty_flags="-it "
+fi
+
+run_cmd=""
+if command -v docker >/dev/null 2>&1; then
+  run_cmd="docker run --rm ${tty_flags}-p ${REDIS_PORT}:6379 -e VALKEY_EXTRA_FLAGS='${VALKEY_EXTRA_FLAGS}' ${VALKEY_IMAGE}"
+elif command -v container >/dev/null 2>&1; then
+  run_cmd="container run --rm ${tty_flags}-p ${REDIS_PORT}:6379 --env VALKEY_EXTRA_FLAGS='${VALKEY_EXTRA_FLAGS}' ${VALKEY_IMAGE}"
+else
+  echo "Error: neither 'container' nor 'docker' command found in PATH." >&2
+  exit 2
+fi
+
+echo "Running: ${run_cmd}"
+
+# Use 'exec' so signals are forwarded to the container process.
+exec sh -c "${run_cmd}"

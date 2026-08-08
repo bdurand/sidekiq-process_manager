@@ -1,0 +1,9 @@
+---
+# Small concurrency so it is easy to follow what each process is doing.
+concurrency: 3
+
+# Short shutdown timeout so restarts are quick to observe.
+timeout: 10
+
+queues:
+  - default
