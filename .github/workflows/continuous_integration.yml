@@ -12,12 +12,6 @@ on:
       - actions-*
   workflow_dispatch:
 
-env:
-  BUNDLE_CLEAN: "true"
-  BUNDLE_PATH: vendor/bundle
-  BUNDLE_JOBS: 3
-  BUNDLE_RETRY: 3
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,33 +39,16 @@ jobs:
           - ruby: "2.5"
             appraisal: "sidekiq_5.0"
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Ruby ${{ matrix.ruby }}
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: "${{ matrix.ruby }}"
-    - name: Install packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install libsqlite3-dev
-    - name: Setup bundler
-      if: matrix.bundler != ''
-      run: |
-        gem uninstall bundler --all
-        gem install bundler --no-document --version ${{ matrix.bundler }}
-    - name: Set Appraisal bundle
-      if: matrix.appraisal != ''
-      run: |
-        echo "using gemfile gemfiles/${{ matrix.appraisal }}.gemfile"
-        bundle config set gemfile "gemfiles/${{ matrix.appraisal }}.gemfile"
-    - name: Install gems
-      run: |
-        bundle update
-    - name: Run Tests
-      run: bundle exec rake
-    - name: standardrb
-      if:   matrix.standardrb == true
-      run:  bundle exec standardrb
-    - name: yard
-      if: matrix.yard == true
-      run: bundle exec yard doc --fail-on-warning
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ruby CI
+        uses: bdurand/github-actions/ruby-ci@b7560883d5f8557f5d69fe8bd82721bbb5ed76df # v1.0.4
+        with:
+          ruby: ${{ matrix.ruby }}
+          appraisal: ${{ matrix.appraisal }}
+          bundler: ${{ matrix.bundler }}
+          standardrb: ${{ matrix.standardrb }}
+          yard: ${{ matrix.yard }}
+          frozen_strings: ${{ matrix.frozen_strings }}

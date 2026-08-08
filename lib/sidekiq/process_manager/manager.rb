@@ -2,6 +2,7 @@
 
 require "sidekiq"
 require "get_process_mem"
+require "timeout"
 
 module Sidekiq
   module ProcessManager
@@ -9,6 +10,12 @@ module Sidekiq
     # that the specified number of sidekiq processes are running. It will also forward
     # signals sent to the main process to the child processes.
     class Manager
+      # Signals that are trapped by the process manager and forwarded to the child processes.
+      SIGNALS = [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].freeze
+
+      # Number of seconds between memory checks when a max memory is set.
+      DEFAULT_MEMORY_CHECK_INTERVAL = 60
+
       attr_reader :cli
 
       # Create a new process manager.
@@ -16,31 +23,38 @@ module Sidekiq
       # @param process_count [Integer] The number of sidekiq processes to start.
       # @param prefork [Boolean] If true, the process manager will load the application before forking.
       # @param preboot [String] If set, the process manager will require the specified file before forking the child processes.
+      # @param memory_check_interval [Numeric] The number of seconds between memory checks
+      #   when a max memory is set.
       # @param mode [Symbol] If set to :testing, the process manager will use a mock CLI.
       # @param silent [Boolean] If true, the process manager will not output any messages.
-      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, mode: nil, silent: false)
+      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, memory_check_interval: nil, mode: nil, silent: false)
         require "sidekiq/cli"
 
         # Get the number of processes to fork
         @process_count = process_count
-        raise ArgumentError.new("Process count must be greater than 1") if @process_count < 1
+        raise ArgumentError.new("Process count must be greater than 0") if @process_count < 1
 
         @prefork = prefork && process_count > 1
         @preboot = preboot if process_count > 1 && !prefork
         @max_memory = ((max_memory.to_i > 0) ? max_memory.to_i : nil)
 
+        if !memory_check_interval.nil? && memory_check_interval.to_f <= 0
+          raise ArgumentError.new("Memory check interval must be greater than 0")
+        end
+
         if mode == :testing
           require_relative "../../../spec/support/mocks"
           @cli = MockSidekiqCLI.new(silent)
-          @memory_check_interval = 1
+          @memory_check_interval = (memory_check_interval || 1).to_f
+          @exit_grace_period = 0.5
         else
           @cli = Sidekiq::CLI.instance
-          @memory_check_interval = 60
+          @memory_check_interval = (memory_check_interval || DEFAULT_MEMORY_CHECK_INTERVAL).to_f
+          @exit_grace_period = 5
         end
 
         @silent = silent
         @pids = []
-        @terminated_pids = []
         @started = false
         @mutex = Mutex.new
       end
@@ -69,7 +83,10 @@ module Sidekiq
 
           while @signal_pipe_read.wait_readable
             begin
-              signal = @signal_pipe_read.gets.strip
+              signal = @signal_pipe_read.gets
+              break if signal.nil?
+
+              signal = signal.strip
               send_signal_to_children(signal.to_sym)
             rescue => e
               log_warning("Error sending signal #{signal} to child processes: #{e.message}")
@@ -78,7 +95,7 @@ module Sidekiq
         end
 
         # Trap signals that will be forwarded to child processes
-        [:INT, :TERM, :USR1, :USR2, :TSTP, :TTIN].each do |signal|
+        SIGNALS.each do |signal|
           ::Signal.trap(signal) do
             if ::Process.pid == master_pid
               signal = :TERM if signal == :INT
@@ -120,7 +137,7 @@ module Sidekiq
       def wait(timeout = 5)
         timeout_time = monotonic_time + timeout
         while monotonic_time <= timeout_time
-          return if @pids.size == @process_count
+          return if pids.size == @process_count
           sleep(0.01)
         end
 
@@ -217,11 +234,20 @@ module Sidekiq
       end
 
       def set_program_name!
-        $PROGRAM_NAME = "sidekiq process manager #{sidekiq_options[:tag]} [#{@pids.size} processes]"
+        $PROGRAM_NAME = "sidekiq process manager #{sidekiq_options[:tag]} [#{pids.size} processes]"
       end
 
       def start_child_process!
         pid = fork do
+          # Child processes inherit the signal handlers installed by the process
+          # manager. Those handlers only do anything in the master process, so
+          # leaving them in place would silently discard any signal sent to the
+          # child before sidekiq installs its own handlers. Restore the default
+          # behavior until then so signals are never swallowed.
+          SIGNALS.each do |signal|
+            ::Signal.trap(signal, "DEFAULT")
+          end
+
           # Set $0 so instrumentation libraries detecting sidekiq from the command run will work properly.
           $0 = File.join(File.dirname($0), "sidekiq")
           @process_count = 0
@@ -232,15 +258,25 @@ module Sidekiq
           Sidekiq::ProcessManager.run_after_fork_hooks
           @cli.run
         end
-        @mutex.synchronize { @pids << pid }
+        shutting_down = false
+        @mutex.synchronize do
+          @pids << pid
+          shutting_down = @process_count < 1
+        end
         log_info("Forked sidekiq process with pid #{pid}")
+        # A shutdown signal may have been forwarded to the other processes while
+        # this one was being forked; it needs to get the signal as well.
+        send_signal_to_pid(:TERM, pid) if shutting_down
         set_program_name!
       end
 
       def send_signal_to_children(signal)
         log_info("Process manager trapped signal #{signal}")
-        @process_count = 0 if signal == :INT || signal == :TERM
-        pids.each do |pid|
+        child_pids = @mutex.synchronize do
+          @process_count = 0 if signal == :INT || signal == :TERM
+          @pids.dup
+        end
+        child_pids.each do |pid|
           send_signal_to_pid(signal, pid)
         end
       end
@@ -262,7 +298,7 @@ module Sidekiq
       end
 
       def start_memory_monitor
-        log_info("Starting memory monitor with max memory #{(@max_memory / (1024**2)).round}mb")
+        log_info("Starting memory monitor with max memory #{(@max_memory / (1024**2)).round}mb checked every #{@memory_check_interval} seconds")
 
         @memory_monitor = Thread.new do
           Thread.current.name = "memory-monitor"
@@ -290,33 +326,88 @@ module Sidekiq
       end
 
       def wait_for_children_to_exit
-        pids.each do |pid|
-          while process_alive?(pid)
-            sleep(0.01)
+        # Allow the SIGKILL failsafe in ensure_pid_dies time to fire before giving up on a process.
+        remaining = reap_child_processes(pids, monotonic_time + sidekiq_shutdown_timeout + @exit_grace_period)
+
+        unless remaining.empty?
+          # Don't leave orphaned processes behind. These pids were never reaped,
+          # so the operating system cannot have reused them for another process
+          # and it is safe to signal them.
+          remaining.each do |pid|
+            ::Process.kill(:KILL, pid)
+            log_warning("Sidekiq process #{pid} failed to exit; killed with SIGKILL")
+          rescue Errno::ESRCH
+            # The process is already dead
           end
+
+          # SIGKILL cannot be caught or ignored, so the processes will exit, but
+          # not necessarily by the time the signal is sent. Wait for them so they
+          # are not left behind as zombies.
+          remaining = reap_child_processes(remaining, monotonic_time + @exit_grace_period)
         end
-        log_info("All sidekiq processes have exited")
+
+        if remaining.empty?
+          log_info("All sidekiq processes have exited")
+        else
+          log_warning("Gave up waiting on sidekiq processes: #{remaining.join(", ")}")
+        end
       end
 
-      def process_alive?(pid)
-        ::Process.getpgid(pid)
+      # Reap child processes as they exit until they have all been reaped or the
+      # deadline passes.
+      #
+      # @return [Array<Integer>] The pids that were not reaped.
+      def reap_child_processes(child_pids, deadline)
+        remaining = child_pids.dup
+        until remaining.empty?
+          # Poll all of the processes on each pass so that one slow process
+          # cannot consume the entire timeout waiting for the others.
+          remaining.delete_if { |pid| reap_child_process(pid) }
+          break if remaining.empty? || monotonic_time >= deadline
+          sleep(0.01)
+        end
+        remaining
+      end
+
+      # Reap a child process if it has exited. The pid is only removed from the
+      # list of running processes when it is actually reaped so that the SIGKILL
+      # failsafe in ensure_pid_dies still sees it as running until then.
+      #
+      # @return [Boolean] true if the process has been reaped or is no longer a child process.
+      def reap_child_process(pid)
+        reaped = begin
+          # The monitoring loop may no longer be running, so reap the child
+          # process here rather than just polling for it to disappear.
+          ::Process.waitpid(pid, ::Process::WNOHANG)
+        rescue Errno::ECHILD, Errno::ESRCH
+          # The process has already been reaped.
+          pid
+        end
+        return false unless reaped
+
+        @mutex.synchronize { @pids.delete(pid) }
         true
-      rescue Errno::ESRCH
-        false
+      end
+
+      def sidekiq_shutdown_timeout
+        (sidekiq_options[:timeout] || 25).to_f
       end
 
       def ensure_pid_dies(pid)
-        # Wait for the process to die, or kill it after a timeout.
-        timeout = (sidekiq_options[:timeout] || 25).to_f
-        end_time = monotonic_time + timeout
-        while monotonic_time < end_time && process_alive?(pid)
+        # Wait for the process to die, or kill it after a timeout. A pid is
+        # removed from the list only once it has been reaped, so the list is the
+        # source of truth for liveness; a pid still in it cannot have been reused
+        # by the operating system for a different process. Checking with a system
+        # call is not reliable since it cannot distinguish a recycled pid.
+        end_time = monotonic_time + sidekiq_shutdown_timeout
+        while monotonic_time < end_time && pids.include?(pid)
           sleep(0.1)
         end
 
-        if process_alive?(pid)
+        if pids.include?(pid)
           begin
             ::Process.kill(:KILL, pid)
-            log_warning("Sidekiq process #{pid} failed to exit after #{timeout} seconds; killed with SIGKILL")
+            log_warning("Sidekiq process #{pid} failed to exit after #{sidekiq_shutdown_timeout} seconds; killed with SIGKILL")
           rescue Errno::ESRCH
             # The process is already dead
           end
@@ -326,19 +417,30 @@ module Sidekiq
       # Listen for child processes dying and restart if necessary.
       def monitor_child_processes
         loop do
-          pid = ::Process.wait
-          @mutex.synchronize { @pids.delete(pid) }
+          begin
+            pid = ::Process.wait
+          rescue Errno::ECHILD
+            # All child processes are already gone.
+            @mutex.synchronize { @pids.clear }
+            break
+          end
+
+          # Process.wait reaps any child process, including ones spawned by
+          # libraries or application code (i.e. get_process_mem shelling out
+          # to ps). Only act on processes forked by the manager.
+          removed = @mutex.synchronize { @pids.delete(pid) }
+          next unless removed
 
           log_info("Sidekiq process #{pid} exited")
 
           # If there are not enough processes running, start a replacement one.
-          if @process_count > @pids.size
+          if @process_count > pids.size
             start_child_process!
           end
 
           set_program_name!
 
-          if @pids.empty?
+          if pids.empty?
             break
           end
         end

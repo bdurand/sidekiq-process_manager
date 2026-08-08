@@ -7,19 +7,23 @@ require_relative "../lib/sidekiq-process_manager"
 DEFAULT_PROCESS_COUNT = 1
 
 def parse_max_memory(max_memory)
-  value = nil
+  Sidekiq::ProcessManager.parse_max_memory(max_memory)
+rescue ArgumentError => e
+  abort(e.message)
+end
 
-  matched = max_memory.to_s.match(/\A([\d]+(?:\.[\d]+)?)([mg])\z/i)
-  if matched
-    value = matched[1].to_f
-    if matched[2].downcase == 'm'
-      value *= 1024 * 1024
-    elsif matched[2].downcase == 'g'
-      value *= 1024 * 1024 * 1024
-    end
+def parse_memory_check_interval(interval)
+  interval = interval.to_s.strip
+  return nil if interval.empty?
+
+  begin
+    interval = Float(interval)
+  rescue ArgumentError, TypeError
+    abort("Invalid memory check interval value: #{interval.inspect}")
   end
+  abort("Memory check interval must be greater than 0") unless interval > 0
 
-  value
+  interval
 end
 
 options = {
@@ -27,6 +31,7 @@ options = {
   prefork: !ENV.fetch("SIDEKIQ_PREFORK", "").empty?,
   preboot: ENV["SIDEKIQ_PREBOOT"],
   max_memory: parse_max_memory(ENV["SIDEKIQ_MAX_MEMORY"]),
+  memory_check_interval: parse_memory_check_interval(ENV["SIDEKIQ_MEMORY_CHECK_INTERVAL"]),
   mode: nil,
 }
 
@@ -45,8 +50,12 @@ parser = OptionParser.new do |opts|
     options[:preboot] = preboot
   end
 
-  opts.on('--max-memory MEMORY', "Max memory for each process (can also specify with SIDEKIQ_MAX_MEMORY); suffix with m or g to specify megabytes or gigabytes") do |max_memory|
+  opts.on('--max-memory MEMORY', "Max memory for each process (can also specify with SIDEKIQ_MAX_MEMORY); value is in bytes, or suffix with m or g to specify megabytes or gigabytes") do |max_memory|
     options[:max_memory] = parse_max_memory(max_memory)
+  end
+
+  opts.on('--memory-check-interval SECONDS', "Seconds between memory checks when a max memory is set (can also specify with SIDEKIQ_MEMORY_CHECK_INTERVAL); defaults to #{Sidekiq::ProcessManager::Manager::DEFAULT_MEMORY_CHECK_INTERVAL} seconds") do |interval|
+    options[:memory_check_interval] = parse_memory_check_interval(interval)
   end
 
   opts.on('--testing', "Enable test mode") do |testing|

@@ -27,6 +27,7 @@ Gem::Specification.new do |spec|
     Rakefile
     gemfiles/
     spec/
+    test_app/
   ]
   spec.files = Dir.chdir(File.expand_path("..", __FILE__)) do
     `git ls-files -z`.split("\x0").reject { |f| ignore_files.any? { |path| f.start_with?(path) } }
@@ -40,6 +41,4 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "sidekiq", ">= 5.0"
   spec.add_dependency "get_process_mem"
-
-  spec.add_development_dependency "bundler"
 end

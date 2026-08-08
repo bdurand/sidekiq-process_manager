@@ -1,0 +1,7 @@
+Gemfile.lock
+.bundle/
+
+# The .env file here is the test app's configuration, not secrets, so it is
+# checked in even though the repository ignores .env everywhere else.
+!.env
+.env.local
