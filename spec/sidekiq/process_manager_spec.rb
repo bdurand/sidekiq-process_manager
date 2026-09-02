@@ -30,4 +30,24 @@ RSpec.describe Sidekiq::ProcessManager do
       expect { Sidekiq::ProcessManager.parse_max_memory("512k") }.to raise_error(ArgumentError)
     end
   end
+
+  describe ".parse_child_termination_timeout" do
+    it "should return nil for blank values" do
+      expect(Sidekiq::ProcessManager.parse_child_termination_timeout(nil)).to eq nil
+      expect(Sidekiq::ProcessManager.parse_child_termination_timeout("")).to eq nil
+      expect(Sidekiq::ProcessManager.parse_child_termination_timeout("  ")).to eq nil
+    end
+
+    it "should parse a positive number of seconds" do
+      expect(Sidekiq::ProcessManager.parse_child_termination_timeout("25")).to eq 25.0
+      expect(Sidekiq::ProcessManager.parse_child_termination_timeout("2.5")).to eq 2.5
+    end
+
+    it "should reject invalid or non-positive values" do
+      expect { Sidekiq::ProcessManager.parse_child_termination_timeout("soon") }.to raise_error(ArgumentError)
+      expect { Sidekiq::ProcessManager.parse_child_termination_timeout("0") }.to raise_error(ArgumentError)
+      expect { Sidekiq::ProcessManager.parse_child_termination_timeout("-1") }.to raise_error(ArgumentError)
+      expect { Sidekiq::ProcessManager.parse_child_termination_timeout("Infinity") }.to raise_error(ArgumentError)
+    end
+  end
 end

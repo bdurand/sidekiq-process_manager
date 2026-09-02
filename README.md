@@ -121,6 +121,18 @@ or
 SIDEKIQ_MEMORY_CHECK_INTERVAL=10 SIDEKIQ_MAX_MEMORY=2g SIDEKIQ_PROCESSES=4 bundle exec sidekiq-process-manager
 ```
 
+By default, the process manager waits for Sidekiq's configured shutdown timeout before it kills a child process that has not exited after `TERM`. You can give the manager a separate grace period with `--child-termination-timeout` or `SIDEKIQ_PROCESS_MANAGER_CHILD_TERMINATION_TIMEOUT`. This is useful when Sidekiq needs to run its hard-shutdown logic before the manager's SIGKILL failsafe fires.
+
+```bash
+bundle exec sidekiq-process-manager --child-termination-timeout 25 -- -t 20 -C config/sidekiq.yml
+```
+
+or
+
+```bash
+SIDEKIQ_PROCESS_MANAGER_CHILD_TERMINATION_TIMEOUT=25 bundle exec sidekiq-process-manager -- -t 20 -C config/sidekiq.yml
+```
+
 ## Alternatives
 
 Any process manager can be an alternative (service, update, systemd, monit, god, etc.).

@@ -25,9 +25,11 @@ module Sidekiq
       # @param preboot [String] If set, the process manager will require the specified file before forking the child processes.
       # @param memory_check_interval [Numeric] The number of seconds between memory checks
       #   when a max memory is set.
+      # @param child_termination_timeout [Numeric] The number of seconds to wait for a child
+      #   to exit after TERM before killing it. Defaults to Sidekiq's shutdown timeout.
       # @param mode [Symbol] If set to :testing, the process manager will use a mock CLI.
       # @param silent [Boolean] If true, the process manager will not output any messages.
-      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, memory_check_interval: nil, mode: nil, silent: false)
+      def initialize(process_count: 1, prefork: false, preboot: nil, max_memory: nil, memory_check_interval: nil, child_termination_timeout: nil, mode: nil, silent: false)
         require "sidekiq/cli"
 
         # Get the number of processes to fork
@@ -41,6 +43,14 @@ module Sidekiq
         if !memory_check_interval.nil? && memory_check_interval.to_f <= 0
           raise ArgumentError.new("Memory check interval must be greater than 0")
         end
+
+        if !child_termination_timeout.nil?
+          timeout = child_termination_timeout.to_f
+          unless timeout.finite? && timeout > 0
+            raise ArgumentError.new("Child termination timeout must be greater than 0")
+          end
+        end
+        @child_termination_timeout = child_termination_timeout&.to_f
 
         if mode == :testing
           require_relative "../../../spec/support/mocks"
@@ -327,7 +337,7 @@ module Sidekiq
 
       def wait_for_children_to_exit
         # Allow the SIGKILL failsafe in ensure_pid_dies time to fire before giving up on a process.
-        remaining = reap_child_processes(pids, monotonic_time + sidekiq_shutdown_timeout + @exit_grace_period)
+        remaining = reap_child_processes(pids, monotonic_time + child_termination_timeout + @exit_grace_period)
 
         unless remaining.empty?
           # Don't leave orphaned processes behind. These pids were never reaped,
@@ -389,8 +399,8 @@ module Sidekiq
         true
       end
 
-      def sidekiq_shutdown_timeout
-        (sidekiq_options[:timeout] || 25).to_f
+      def child_termination_timeout
+        @child_termination_timeout || (sidekiq_options[:timeout] || 25).to_f
       end
 
       def ensure_pid_dies(pid)
@@ -399,7 +409,7 @@ module Sidekiq
         # source of truth for liveness; a pid still in it cannot have been reused
         # by the operating system for a different process. Checking with a system
         # call is not reliable since it cannot distinguish a recycled pid.
-        end_time = monotonic_time + sidekiq_shutdown_timeout
+        end_time = monotonic_time + child_termination_timeout
         while monotonic_time < end_time && pids.include?(pid)
           sleep(0.1)
         end
@@ -407,7 +417,7 @@ module Sidekiq
         if pids.include?(pid)
           begin
             ::Process.kill(:KILL, pid)
-            log_warning("Sidekiq process #{pid} failed to exit after #{sidekiq_shutdown_timeout} seconds; killed with SIGKILL")
+            log_warning("Sidekiq process #{pid} failed to exit after #{child_termination_timeout} seconds; killed with SIGKILL")
           rescue Errno::ESRCH
             # The process is already dead
           end
