@@ -7,8 +7,14 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
   # is exercised directly against child processes that refuse to exit so that
   # no monitoring thread is running to reap them first.
   let(:manager) do
-    Sidekiq::ProcessManager::Manager.new(process_count: 2, mode: :testing, silent: true)
+    Sidekiq::ProcessManager::Manager.new(
+      process_count: 2,
+      child_termination_timeout: child_termination_timeout,
+      mode: :testing,
+      silent: true
+    )
   end
+  let(:child_termination_timeout) { nil }
 
   after do
     Array(@forked_pids).each do |pid|
@@ -72,6 +78,18 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
   end
 
   describe "waiting for child processes to exit" do
+    it "should default to the Sidekiq shutdown timeout" do
+      expect(manager.send(:child_termination_timeout)).to eq 0.1
+    end
+
+    context "with an independent child termination timeout" do
+      let(:child_termination_timeout) { 0.25 }
+
+      it "should use the manager timeout instead of the Sidekiq shutdown timeout" do
+        expect(manager.send(:child_termination_timeout)).to eq 0.25
+      end
+    end
+
     it "should kill and reap processes that do not exit on their own" do
       pids = 2.times.collect { fork_unresponsive_process }
       manager.instance_variable_set(:@pids, pids.dup)

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- The process manager's child termination timeout can now be configured independently from Sidekiq's shutdown timeout with `--child-termination-timeout` or `SIDEKIQ_PROCESS_MANAGER_CHILD_TERMINATION_TIMEOUT`.
+
 ## 1.1.3
 
 ### Added

@@ -91,6 +91,18 @@ RSpec.describe Sidekiq::ProcessManager::Manager do
       }.to raise_error(ArgumentError, "Process count must be greater than 0")
     end
 
+    it "should require a positive child termination timeout" do
+      expect {
+        Sidekiq::ProcessManager::Manager.new(child_termination_timeout: 0, mode: :testing, silent: true)
+      }.to raise_error(ArgumentError, "Child termination timeout must be greater than 0")
+    end
+
+    it "should require a finite child termination timeout" do
+      expect {
+        Sidekiq::ProcessManager::Manager.new(child_termination_timeout: Float::INFINITY, mode: :testing, silent: true)
+      }.to raise_error(ArgumentError, "Child termination timeout must be greater than 0")
+    end
+
     it "should shut down all processes when a child dies at the same time as a TERM signal" do
       kill_pid = manager.pids.first
       ::Process.kill(:TERM, kill_pid)

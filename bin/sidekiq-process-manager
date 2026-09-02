@@ -26,12 +26,19 @@ def parse_memory_check_interval(interval)
   interval
 end
 
+def parse_child_termination_timeout(timeout)
+  Sidekiq::ProcessManager.parse_child_termination_timeout(timeout)
+rescue ArgumentError => e
+  abort(e.message)
+end
+
 options = {
   process_count: Integer(ENV.fetch('SIDEKIQ_PROCESSES', DEFAULT_PROCESS_COUNT)),
   prefork: !ENV.fetch("SIDEKIQ_PREFORK", "").empty?,
   preboot: ENV["SIDEKIQ_PREBOOT"],
   max_memory: parse_max_memory(ENV["SIDEKIQ_MAX_MEMORY"]),
   memory_check_interval: parse_memory_check_interval(ENV["SIDEKIQ_MEMORY_CHECK_INTERVAL"]),
+  child_termination_timeout: parse_child_termination_timeout(ENV["SIDEKIQ_PROCESS_MANAGER_CHILD_TERMINATION_TIMEOUT"]),
   mode: nil,
 }
 
@@ -56,6 +63,10 @@ parser = OptionParser.new do |opts|
 
   opts.on('--memory-check-interval SECONDS', "Seconds between memory checks when a max memory is set (can also specify with SIDEKIQ_MEMORY_CHECK_INTERVAL); defaults to #{Sidekiq::ProcessManager::Manager::DEFAULT_MEMORY_CHECK_INTERVAL} seconds") do |interval|
     options[:memory_check_interval] = parse_memory_check_interval(interval)
+  end
+
+  opts.on('--child-termination-timeout SECONDS', "Seconds to wait after TERM before killing a child process (can also specify with SIDEKIQ_PROCESS_MANAGER_CHILD_TERMINATION_TIMEOUT); defaults to Sidekiq's shutdown timeout") do |timeout|
+    options[:child_termination_timeout] = parse_child_termination_timeout(timeout)
   end
 
   opts.on('--testing', "Enable test mode") do |testing|
